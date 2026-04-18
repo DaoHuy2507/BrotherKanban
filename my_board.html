@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BrotherKanban | My Board</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: { extend: {
+            "colors": {
+                "surface-dim": "#d3d5cf", "on-error-container": "#570008", "on-surface": "#2d2f2c",
+                "on-surface-variant": "#5a5c58", "on-secondary-container": "#00534d",
+                "surface-container-low": "#f1f1ec", "tertiary-container": "#feb300",
+                "secondary-fixed": "#7fe6db", "error": "#b31b25",
+                "surface-container-high": "#e2e3dd", "surface-bright": "#f7f7f2",
+                "on-error": "#ffefee", "inverse-surface": "#0d0f0c", "tertiary": "#7b5400",
+                "surface-container-highest": "#dcddd7", "on-primary-container": "#4d001c",
+                "primary-dim": "#a00043", "outline-variant": "#adada9", "secondary": "#006760",
+                "background": "#f7f7f2", "on-primary": "#ffeff0",
+                "surface-container-lowest": "#ffffff", "primary": "#b7004d", "surface": "#f7f7f2",
+                "on-secondary": "#bffff7", "secondary-container": "#7fe6db", "outline": "#767773",
+                "surface-container": "#e8e9e3", "secondary-dim": "#005a54",
+                "primary-container": "#ff7294", "inverse-primary": "#ff4d81",
+                "error-dim": "#9f0519", "on-secondary-fixed": "#003e39",
+                "surface-variant": "#dcddd7", "on-tertiary-container": "#523700",
+                "primary-fixed": "#ff7294", "tertiary-fixed": "#feb300",
+                "error-container": "#fb5151", "surface-tint": "#b7004d",
+                "on-background": "#2d2f2c", "inverse-on-surface": "#9c9d99",
+                "on-tertiary": "#fff1df", "primary-fixed-dim": "#ff5484",
+                "midnight": "#0f172a", "neon-pink": "#ff007f", "neon-cyan": "#00f3ff",
+            },
+            "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+            "fontFamily": { "headline": ["Epilogue"], "body": ["Be Vietnam Pro"], "label": ["Space Grotesk"] }
+        }}
+    }
+</script>
+<style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    body { font-family: 'Be Vietnam Pro', sans-serif; }
+    h1, h2, h3 { font-family: 'Epilogue', sans-serif; }
+    .label-font { font-family: 'Space Grotesk', sans-serif; }
+    .cel-shade-card { border: 3px solid #2d2f2c; box-shadow: 6px 6px 0px 0px #2d2f2c; transition: all 0.2s ease; }
+    .dark .cel-shade-card { border-color: #00f3ff; box-shadow: 6px 6px 0px 0px #ff007f; }
+    .dark .neon-glow-pink { text-shadow: 0 0 8px #ff007f, 0 0 12px #ff007f; color: #ff7294; }
+    .dark .neon-glow-cyan { text-shadow: 0 0 8px #00f3ff, 0 0 12px #00f3ff; color: #00f3ff; }
+    .task-card { cursor: grab; transition: transform 0.15s; }
+    .task-card:hover { transform: translateY(-3px) rotate(-0.5deg); }
+    .kanban-col { min-height: 300px; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    @keyframes theme-flicker {
+        0% { opacity: 1; } 10% { opacity: 0.8; filter: brightness(1.2); }
+        20% { opacity: 1; } 100% { opacity: 1; }
+    }
+    .theme-transitioning { animation: theme-flicker 0.4s ease-out; }
+</style>
+<script src="./lang.js"></script>
+<script src="./bk-store.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./bk-supabase.js"></script>
+<script src="./bk-realtime.js"></script>
+<script>
+    /* t() helper - dùng sau khi lang.js đã load */
+    function t(key){
+      const lang = localStorage.getItem('bk-lang')||'vi';
+      return (typeof TRANSLATIONS!=='undefined' && TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ? TRANSLATIONS[lang][key] : key;
+    }
+    /* ===== MODAL ===== */
+    function openModal()  { document.getElementById('addModal').classList.add('active'); }
+    function closeModal() {
+        document.getElementById('addModal').classList.remove('active');
+        document.getElementById('taskName').value = '';
+        document.getElementById('taskDesc').value = '';
+    }
+
+    /* ===== THEME - handled by lang.js ===== */
+    function toggleTheme() {
+        const html = document.documentElement;
+        document.body.classList.add('theme-transitioning');
+        const isDark = html.classList.contains('dark');
+        setTimeout(() => { html.classList.toggle('dark'); }, 100);
+        setTimeout(() => { document.body.classList.remove('theme-transitioning'); }, 500);
+        localStorage.setItem('bk-theme', isDark ? 'light' : 'dark');
+    }
+
+    /* ===== BUILD CARD HTML ===== */
+    function buildCardHTML(task) {
+        const pMap = {
+            high:   { label: `🔴 ${t('priority-high-short')||'High'}`,   cls: 'bg-red-100 text-red-600 border-red-400' },
+            medium: { label: `🟡 ${t('priority-med-short')||'Medium'}`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-400' },
+            low:    { label: `⚪ ${t('priority-low-short')||'Low'}`,    cls: 'bg-gray-100 text-gray-500 border-gray-300' },
+        };
+        const p = pMap[task.priority] || pMap.low;
+        let borderStyle = '';
+        if (task.status === 'doing') borderStyle = 'style="border: 3px solid #f59e0b; box-shadow: 6px 6px 0px 0px #f59e0b;"';
+        else if (task.status === 'done') borderStyle = 'style="border: 3px solid #22c55e; box-shadow: 6px 6px 0px 0px #22c55e; opacity:0.8;"';
+        const titleCls = task.status === 'done' ? 'line-through opacity-60' : '';
+        const canEdit  = canEditTask(task); // ← chỉ true nếu manager hoặc task của mình
+
+        // Progress slider: chỉ hiện cho người có quyền edit
+        const progressHtml = task.status === 'doing' ? (
+            canEdit ? `
+            <div class="mb-3">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="label-font text-[10px] font-bold text-on-surface-variant dark:text-slate-400">${t('card-progress')||'Tiến độ'}</span>
+                    <span class="label-font text-[10px] font-bold dark:text-amber-400" id="pct-lbl-${task.id}">${task.progress || 0}%</span>
+                </div>
+                <input type="range" min="0" max="100" value="${task.progress || 0}"
+                    class="w-full h-2 accent-amber-400 cursor-pointer"
+                    oninput="updateTaskProgress('${task.id}', this.value)"/>
+            </div>` : `
+            <div class="mb-3">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="label-font text-[10px] font-bold text-on-surface-variant dark:text-slate-400">${t('card-progress')||'Tiến độ'}</span>
+                    <span class="label-font text-[10px] font-bold text-slate-400">${task.progress || 0}%</span>
+                </div>
+                <div class="w-full h-2 bg-gray-200 dark:bg-slate-600 rounded overflow-hidden">
+                    <div class="h-full bg-amber-400" style="width:${task.progress||0}%"></div>
+                </div>
+            </div>`
+        ) : '';
+
+        // Action buttons: chỉ member có quyền mới di chuyển task
+        const actionBtn = task.status === 'done'
+            ? `<span class="label-font text-[10px] font-black text-green-600 dark:text-green-400">YYYEAHHH! 🎉</span>`
+            : canEdit
+            ? (task.status === 'todo'
+                ? `<button onclick="moveTaskUI('${task.id}','doing')" class="label-font text-[10px] font-black bg-yellow-100 text-yellow-700 border border-yellow-400 px-2 py-0.5 rounded hover:bg-yellow-200 transition-colors">${t('card-move-doing')||'→ Đang Làm'}</button>`
+                : `<button onclick="moveTaskUI('${task.id}','done')" class="label-font text-[10px] font-black bg-green-100 text-green-700 border border-green-400 px-2 py-0.5 rounded hover:bg-green-200 transition-colors">${t('card-move-done')||'→ Xong Rồi'}</button>`)
+            : `<span class="label-font text-[10px] text-slate-400" title="Không phải task của bạn">🔒 Read-only</span>`;
+
+        return `
+        <div class="task-card bg-white dark:bg-slate-800 ${task.status !== 'doing' && task.status !== 'done' ? 'cel-shade-card' : ''} p-4"
+             data-priority="${task.priority}" data-id="${task.id}" ${borderStyle}>
+            <div class="flex justify-between items-start mb-2">
+                <span class="label-font text-[10px] font-black ${p.cls} border-2 px-2 py-0.5 rounded uppercase">${p.label}</span>
+                ${canDeleteTask(task) ? `<button onclick="deleteTaskUI('${task.id}')" class="text-[#2d2f2c]/30 hover:text-red-500 transition-colors">
+                    <span class="material-symbols-outlined text-lg">delete</span>
+                </button>` : '<span title="Chỉ Manager hoặc chủ task mới xóa được" style="font-size:12px;opacity:.3;">🔒</span>'}
+            </div>
+            <h4 class="font-bold text-base dark:text-white mb-1 ${titleCls}">${bkEscHtml(task.title)}</h4>
+            <p class="text-xs text-on-surface-variant dark:text-slate-400 mb-3">${bkEscHtml(task.desc || '')}</p>
+            ${progressHtml}
+            <div class="flex justify-between items-center">
+                <span class="label-font text-[10px] font-bold text-on-surface-variant dark:text-slate-500">👤 ${bkEscHtml(task.assignee || 'You')}</span>
+                ${actionBtn}
+            </div>
+        </div>`;
+    }
+
+    /* ===== RENDER BOARD FROM STORE ===== */
+    function renderBoard(filterPriority = 'all') {
+        const tasks = BKStore.getTasks();
+        ['todo','doing','done'].forEach(status => {
+            const col = document.getElementById('col-' + status);
+            if (!col) return;
+            col.innerHTML = tasks
+                .filter(t => t.status === status && (filterPriority === 'all' || t.priority === filterPriority))
+                .map(buildCardHTML).join('');
+        });
+        updateCounts();
+    }
+
+    /* ===== MOVE TASK ===== */
+    function moveTaskUI(id, newStatus) {
+        const task = BKStore.getTasks().find(t => t.id === id);
+        if (!task) return;
+        if (!canEditTask(task)) {
+            alert('Benson: Đây không phải nhiệm vụ của bạn!');
+            return;
+        }
+        BKStore.moveTask(id, newStatus);
+        renderBoard(currentFilter());
+        // Đồng bộ lên Supabase bất đồng bộ
+        BKSupabase.updateTask(id, { status: newStatus }).catch(e => console.warn('[Board] updateTask sync:', e.message));
+    }
+
+    /* ===== DELETE TASK ===== */
+    function deleteTaskUI(id) {
+        const task = BKStore.getTasks().find(t => t.id === id);
+        if (!task || !canDeleteTask(task)) return;
+        if (!confirm(`Benson: Xóa "${task?.title || 'task này'}" thật không?`)) return;
+        BKStore.deleteTask(id);
+        renderBoard(currentFilter());
+        // Xóa trên Supabase
+        BKSupabase.deleteTask(id).catch(e => console.warn('[Board] deleteTask sync:', e.message));
+    }
+
+    /* ===== UPDATE PROGRESS ===== */
+    function updateTaskProgress(id, value) {
+        const task = BKStore.getTasks().find(t => t.id === id);
+        // Server-side guard: chỉ chủ task mới cập nhật progress
+        if (!task || !canEditTask(task)) return;
+        const pct = parseInt(value);
+        BKStore.updateProgress(id, pct);
+        const lbl = document.getElementById('pct-lbl-' + id);
+        if (lbl) lbl.textContent = pct + '%';
+    }
+
+    /* ===== ADD TASK ===== */
+    async function addTask() {
+        const profile = _getBKProfile();
+        if (profile && profile.role !== 'manager') {
+            alert('Benson: Task do tôi phân công! Đợi lệnh đi!');
+            closeModal();
+            return;
+        }
+        const name     = document.getElementById('taskName').value.trim();
+        const desc     = document.getElementById('taskDesc').value.trim();
+        const priority = document.getElementById('taskPriority').value;
+        const status   = document.getElementById('taskStatus').value;
+        if (!name) { alert('Benson nói: PHẢI ĐẶT TÊN NHIỆM VỤ! KHÔNG ĐẶT THÌ NGHỈ VIỆC!'); return; }
+        const assigneeEl = document.getElementById('taskAssignee');
+        const assignee = assigneeEl && assigneeEl.value ? assigneeEl.value : (profile ? profile.name : 'You');
+
+        // Lưu local ngay (UI nhanh)
+        BKStore.addTask({ title: name, desc, priority, status, assignee, dueDate: Date.now() + 86400000*7 });
+        renderBoard(currentFilter());
+        closeModal();
+
+        // Đồng bộ lên Supabase (bất đồng bộ)
+        try {
+          await BKSupabase.addTask({ title: name, description: desc, priority, status, assignee });
+        } catch(e) { console.warn('[Board] addTask sync failed:', e.message); }
+    }
+
+    /* ===== UPDATE COUNTS ===== */
+    function updateCounts() {
+        [['col-todo','badge-todo'],['col-doing','badge-doing'],['col-done','badge-done']].forEach(([colId,badgeId]) => {
+            const col = document.getElementById(colId);
+            const badge = document.getElementById(badgeId);
+            if (col && badge) badge.textContent = col.querySelectorAll('.task-card:not([style*="display: none"])').length;
+        });
+    }
+
+    function currentFilter() {
+        return document.getElementById('priorityFilter')?.value || 'all';
+    }
+
+    /* ===== PERMISSIONS ===== */
+    function _getBKProfile() {
+        try { return JSON.parse(localStorage.getItem('bk-current-user') || 'null'); } catch(_) { return null; }
+    }
+    function canEditTask(task) {
+        var p = _getBKProfile();
+        if (!p) return true;             // không có profile → legacy mode, cho phép
+        if (p.role === 'manager') return true; // manager chỉnh được mọi task
+        // member chỉ chỉnh task mà mình được assignee
+        return task.assignee === p.name || task.assignee === 'You';
+    }
+    function canDeleteTask(task) {
+        // xóa → cùng logic với edit
+        return canEditTask(task);
+    }
+
+    /* ===== LOGOUT ===== */
+    function doLogout() { window.doLogout(); }
+
+    /* ===== INIT ===== */
+    document.addEventListener('DOMContentLoaded', async () => {
+        BKRealtime.init();
+
+        // Kéo dữ liệu mới từ Supabase trước khi render
+        try { await BKSupabase.pullToLocal(); } catch(_) {}
+        renderBoard();
+
+        const profile   = _getBKProfile();
+        const isManager = profile && profile.role === 'manager';
+
+        if (!isManager) {
+            document.querySelectorAll('button[onclick="openModal()"], a[onclick="openModal()"]')
+              .forEach(b => b.style.display = 'none');
+            const aside = document.querySelector('aside');
+            if (aside) {
+                const notice = document.createElement('div');
+                notice.style.cssText = 'background:#fef9c3;border:2px dashed #fbbf24;padding:8px 12px;font-family:"Space Grotesk",sans-serif;font-size:11px;font-weight:700;text-align:center;border-radius:4px;color:#92400e;';
+                notice.textContent = '👁️ Chế độ XEM — Chỉ Manager mới tạo task';
+                const firstNav = aside.querySelector('nav');
+                if (firstNav) firstNav.before(notice);
+            }
+        } else {
+            // Manager: Populate assignee từ BKStore (đã được sync từ Supabase)
+            const assigneeEl = document.getElementById('taskAssignee');
+            if (assigneeEl) {
+                const members = BKStore.getMembers ? BKStore.getMembers() : [];
+                const names   = members.length > 0
+                  ? members.map(m => m.name)
+                  : ['Benson','Skips','Mordecai','Rigby','Pops']; // fallback
+                names.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m; opt.textContent = m;
+                    assigneeEl.appendChild(opt);
+                });
+            }
+        }
+
+        document.getElementById('priorityFilter')?.addEventListener('change', e => renderBoard(e.target.value));
+        window.__boardRerenderOnLang = () => renderBoard(currentFilter());
+        const hl = new URLSearchParams(location.search).get('highlight');
+        if (hl) {
+            setTimeout(() => {
+                const el = document.querySelector(`[data-id="${hl}"]`);
+                if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.style.outline='3px solid #ff007f'; }
+            }, 400);
+        }
+    });
+
+</script>
+</head>
+<body class="bg-background dark:bg-midnight text-on-background dark:text-slate-100">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col p-4 space-y-6 z-40 bg-[#e8e9e3] dark:bg-slate-900 border-r-4 border-[#2d2f2c] dark:border-neon-cyan">
+    <div class="flex items-center gap-3 px-2">
+        <div class="w-12 h-12 bg-primary-container border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md flex items-center justify-center overflow-hidden">
+            <img alt="Logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-nZAddATXUnixnquI_8ReEW_nNerUNdJyIgj3QzEjATNT3DeT-c5fy1Qhtlu328p0n18YdHP-nHymlYLGN5IDXq6nI4mdYB1gI6Kw9-xKiL2svY7wqHo-HZZF-_CjUqj8pi-H4ccKH1fkYg39rrp2BQ9XiH2sm51nCvqdrf2NS39lO8Mt6gKJIt1EXQYtCLQh-S9Y-B_t-N9A3ldGgGSyg180y7nC4Utvl7b1hJQiUK65TgGqo0N_Jn3ilqRcoM0RBEWFX6G5qlQ"/>
+        </div>
+        <div>
+            <h1 class="text-xl font-bold text-[#b7004d] dark:text-neon-pink neon-glow-pink tracking-tighter">The Park</h1>
+    <p class="font-['Space_Grotesk'] text-xs font-medium text-[#2d2f2c] dark:text-neon-cyan opacity-70 uppercase tracking-widest" data-i18n="site-tagline">Kanban Admin</p>
+        </div>
+    </div>
+    <button onclick="openModal()" class="w-full bg-tertiary-container dark:bg-amber-400 text-[#2d2f2c] border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold font-['Space_Grotesk'] flex items-center justify-center gap-2 active:translate-y-[2px] active:translate-x-[2px] transition-all">
+        <span class="material-symbols-outlined">add_circle</span> <span data-i18n="btn-new-task">Thêm Task Mới</span>
+    </button>
+    <nav class="flex-1 space-y-2">
+        <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="brotherkanban_dashboard_creative_night/code.html">
+            <span class="material-symbols-outlined">dashboard</span> <span data-i18n="nav-dashboard">Tổng Quan</span>
+        </a>
+        <a class="flex items-center gap-3 bg-[#ff7294] dark:bg-neon-pink text-[#2d2f2c] dark:text-white border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold shadow-[4px_4px_0px_0px_rgba(45,47,44,1)] dark:shadow-[4px_4px_0px_0px_rgba(0,243,255,1)] transition-all" href="#">
+            <span class="material-symbols-outlined">view_kanban</span> <span data-i18n="nav-myboard">Bảng Của Tôi</span>
+        </a>
+        <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="team.html">
+            <span class="material-symbols-outlined">group</span> <span data-i18n="nav-team">Đội Ngũ</span>
+        </a>
+        <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="analytics.html">
+            <span class="material-symbols-outlined">insights</span> <span data-i18n="nav-analytics">Thống Kê</span>
+        </a>
+        <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="settings.html">
+            <span class="material-symbols-outlined">settings</span> <span data-i18n="nav-settings">Cài Đặt</span>
+        </a>
+    </nav>
+    <div class="space-y-2 pt-6 border-t-2 border-[#2d2f2c]/10 dark:border-neon-cyan/20">
+        <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-400 p-2 font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="#">
+            <span class="material-symbols-outlined text-xl">help</span> <span data-i18n="nav-help">Trợ Giúp</span>
+        </a>
+        <button onclick="doLogout()" class="flex w-full items-center gap-3 text-[#b7004d] dark:text-neon-pink p-2 font-['Space_Grotesk'] font-bold hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all">
+            <span class="material-symbols-outlined text-xl">logout</span> <span data-i18n="nav-logout">Đăng Xuất</span>
+        </button>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="ml-64 min-h-screen flex flex-col relative overflow-hidden">
+    <!-- Park Background (covers full height) -->
+    <div class="absolute inset-0 z-0 pointer-events-none">
+        <img alt="Park background" class="w-full h-full object-cover opacity-10 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay" src="https://lh3.googleusercontent.com/aida/ADBb0uizYgT99pdp9X-L_qaDnz7PUOQG5ygUQT1Vs5I0m-LSMJUrYobtbOrWDorY9HmAh6k2tdr1iCPpeCf9ViVoI2uz0-vTz-QsHymDXO5G3y8bEuK7DBQ8XOXr1uJlexcNtjuFY5ufjD8DY5Dk41QVUhG9RKhS9Ktisam-xk1StxNeBzjDYz44WAReHkXpI1g7l2zmTNgnmxmk3FXBzvVai2jt9fcsbHQD6hvHZul42Uemp3W-0v9vlT3dh2o"/>
+        <div class="absolute inset-0 bg-transparent dark:bg-midnight/60"></div>
+    </div>
+    <!-- TOPBAR -->
+    <header class="flex justify-between items-center px-6 py-4 w-full bg-[#f7f7f2] dark:bg-slate-900/80 backdrop-blur-md border-b-4 border-[#2d2f2c] dark:border-neon-pink sticky top-0 z-30">
+        <div class="flex items-center gap-8">
+            <span class="text-2xl font-black text-[#2d2f2c] dark:text-neon-cyan italic neon-glow-cyan">BrotherKanban</span>
+            <div class="relative flex items-center bg-[#e8e9e3] dark:bg-slate-800 border-2 border-[#2d2f2c] dark:border-neon-cyan px-3 py-1.5 rounded-md">
+                <span class="material-symbols-outlined text-[#2d2f2c] dark:text-neon-cyan mr-2">search</span>
+                <input class="bg-transparent border-none focus:ring-0 text-sm font-['Space_Grotesk'] font-medium placeholder-[#2d2f2c]/50 dark:placeholder-neon-cyan/50 dark:text-white" placeholder="Search vibes..." type="text"/>
+            </div>
+        </div>
+        <nav class="hidden lg:flex items-center gap-8">
+            <a class="font-['Epilogue'] font-bold tracking-tight text-sm uppercase text-[#b7004d] dark:text-neon-pink border-b-2 border-[#b7004d] dark:border-neon-pink" href="my_board.html">Tasks</a>
+            <a class="font-['Epilogue'] font-bold tracking-tight text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-[#b7004d] dark:hover:text-neon-cyan transition-transform" href="sprint.html">Sprint</a>
+            <a class="font-['Epilogue'] font-bold tracking-tight text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-[#b7004d] dark:hover:text-neon-cyan transition-transform" href="reports.html">Reports</a>
+        </nav>
+        <div class="flex items-center gap-4">
+            <button id="lang-toggle-btn" onclick="toggleLanguage()" class="px-3 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-cyan rounded-md hover:bg-secondary-container transition-colors label-font font-black text-sm dark:text-neon-cyan">🇺🇸 EN</button>
+            <button class="w-10 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md hover:bg-tertiary-container transition-colors dark:text-neon-pink" onclick="toggleTheme()">
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dark_mode</span>
+            </button>
+            <div class="w-10 h-10 border-2 border-[#2d2f2c] dark:border-neon-pink rounded-full overflow-hidden bg-secondary-container">
+                <img alt="User avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByLS_McVi5biXabvFkTkSJClju-hPet-pITr6Ux7OqplpjaST-KNyVmQ8XrVEtw4JGh-Z74VXDYOuBdN8SCeXwfHp-BuWK1Yxmw9uj--NsBxvxhC0eH6ofzWvWhqzUBIsY6NkdAqbCZd1zfrytkiw3SYDtmoMh79Yc8cRGVkHgnhqrlfMi6HQGDONEIEAOV6ImOhzgePZaVGGcdqTMcTuxM8sEcSjShNUPoNNQhywFm8svSwbKyiJCMkcZGYTzKKUJIXn6xqvAC3w"/>
+            </div>
+        </div>
+    </header>
+
+    <!-- PAGE CONTENT -->
+    <main class="p-8 flex-1 relative z-10">
+        <!-- Header -->
+        <section class="flex flex-col md:flex-row justify-between items-end gap-6 mb-10">
+            <div>
+                <span class="label-font bg-secondary-container dark:bg-neon-cyan/20 dark:border-neon-cyan dark:text-neon-cyan text-on-surface px-3 py-1 border-2 border-[#2d2f2c] rounded-full text-xs font-bold uppercase tracking-widest inline-block mb-4 rotate-1" data-i18n="board-badge">BẢN ĐỒ NHIỆM VỤ</span>
+                <h2 class="text-5xl font-black text-on-surface dark:text-white tracking-tighter leading-none mb-2" data-i18n="board-title">Bảng Của Tôi</h2>
+                <p class="text-lg font-medium text-on-surface-variant dark:text-slate-300" data-i18n="board-subtitle">"Bắt đầu thôi Mordecai!" — Rigby, chưa bao giờ làm gì</p>
+            </div>
+            <div class="flex gap-3 flex-wrap">
+                <select id="priorityFilter" class="bg-surface-container dark:bg-slate-800 border-2 border-[#2d2f2c] dark:border-neon-cyan p-2 font-['Space_Grotesk'] font-bold text-sm dark:text-white rounded-md">
+                    <option value="all" data-i18n="board-filter-all">Tất Cả Độ Ưu Tiên</option>
+                    <option value="high" data-i18n="board-filter-high">🔴 Cao</option>
+                    <option value="medium" data-i18n="board-filter-mid">🟡 Trung Bình</option>
+                    <option value="low" data-i18n="board-filter-low">⚪ Thấp</option>
+                </select>
+                <button onclick="openModal()" class="bg-primary dark:bg-neon-pink text-white border-2 border-[#2d2f2c] dark:border-white px-4 py-2 font-bold font-['Space_Grotesk'] flex items-center gap-2 rounded-md shadow-[4px_4px_0px_0px_#4d001c] hover:-translate-y-1 transition-all">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span data-i18n="btn-add-task">Thêm Nhiệm Vụ</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- KANBAN COLUMNS -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- TO DO -->
+            <div class="bg-surface-container dark:bg-slate-900 rounded-lg overflow-hidden kanban-col-wrapper" style="border: 3px solid #2d2f2c;">
+                <div class="flex items-center justify-between px-4 py-3 bg-[#dcddd7] dark:bg-slate-800 border-b-4 border-[#2d2f2c] dark:border-slate-600">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-slate-400 border-2 border-[#2d2f2c]"></span>
+                <h3 class="font-black text-sm uppercase tracking-wider dark:text-white">📋 <span data-i18n="col-todo">CẦN LÀM</span></h3>
+                    </div>
+                    <span id="badge-todo" class="label-font text-xs font-black bg-slate-400 text-white px-2 py-0.5 rounded-full count-badge">3</span>
+                </div>
+                <div id="col-todo" class="kanban-col p-3 space-y-3">
+                    <!-- Rendered by renderBoard() from BKStore -->
+                </div>
+            </div>
+
+            <!-- IN PROGRESS -->
+            <div class="bg-surface-container dark:bg-slate-900 rounded-lg overflow-hidden kanban-col-wrapper" style="border: 3px solid #2d2f2c;">
+                <div class="flex items-center justify-between px-4 py-3 bg-amber-100 dark:bg-amber-900/20 border-b-4 border-[#2d2f2c] dark:border-amber-400">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-amber-400 border-2 border-[#2d2f2c] animate-pulse"></span>
+                        <h3 class="font-black text-sm uppercase tracking-wider dark:text-amber-300">⚡ <span data-i18n="col-doing">ĐANG LÀM</span></h3>
+                    </div>
+                    <span id="badge-doing" class="label-font text-xs font-black bg-amber-400 text-[#2d2f2c] px-2 py-0.5 rounded-full count-badge">2</span>
+                </div>
+                <div id="col-doing" class="kanban-col p-3 space-y-3">
+                    <!-- Rendered by renderBoard() from BKStore -->
+                </div>
+            </div>
+
+            <!-- DONE -->
+            <div class="bg-surface-container dark:bg-slate-900 rounded-lg overflow-hidden kanban-col-wrapper" style="border: 3px solid #2d2f2c;">
+                <div class="flex items-center justify-between px-4 py-3 bg-green-100 dark:bg-green-900/20 border-b-4 border-[#2d2f2c] dark:border-green-400">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-green-500 border-2 border-[#2d2f2c]"></span>
+                        <h3 class="font-black text-sm uppercase tracking-wider dark:text-green-300">✅ <span data-i18n="col-done">HOÀN THÀNH</span></h3>
+                    </div>
+                    <span id="badge-done" class="label-font text-xs font-black bg-green-500 text-white px-2 py-0.5 rounded-full count-badge">2</span>
+                </div>
+                <div id="col-done" class="kanban-col p-3 space-y-3">
+                    <!-- Rendered by renderBoard() from BKStore -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+<!-- FAB removed as requested -->
+</div>
+
+<!-- ADD TASK MODAL -->
+<div id="addModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white dark:bg-slate-800 border-4 border-[#2d2f2c] dark:border-neon-cyan w-full max-w-lg mx-4 shadow-[12px_12px_0px_0px_#2d2f2c] dark:shadow-[12px_12px_0px_0px_#ff007f]">
+        <div class="bg-primary-container dark:bg-neon-pink/20 border-b-4 border-[#2d2f2c] dark:border-neon-pink px-6 py-4 flex justify-between items-center">
+            <h3 class="font-black text-xl uppercase tracking-tight dark:text-white" data-i18n="modal-title">🎯 LỆNH TRIỆU TẬP</h3>
+            <button onclick="closeModal()" class="w-8 h-8 border-2 border-[#2d2f2c] dark:border-neon-cyan flex items-center justify-center hover:bg-red-100 transition-colors dark:text-white">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="p-6 space-y-5">
+            <div>
+                <label class="label-font text-xs font-black uppercase block mb-2 dark:text-slate-300" data-i18n="modal-name-label">Tên Nhiệm Vụ</label>
+                <input id="taskName" type="text" data-i18n-placeholder="modal-name-ph" placeholder="VD: Cứu Công Viên khỏi Ma Cây..." class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 font-bold focus:outline-none dark:bg-slate-700 dark:text-white shadow-[4px_4px_0px_0px_#2d2f2c]"/>
+            </div>
+            <div>
+                <label class="label-font text-xs font-black uppercase block mb-2 dark:text-slate-300" data-i18n="modal-desc-label">Mô Tả Chi Tiết</label>
+                <textarea id="taskDesc" rows="3" data-i18n-placeholder="modal-desc-ph" placeholder="Chi tiết nhiệm vụ. Benson cần biết đủ thứ..." class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 text-sm focus:outline-none dark:bg-slate-700 dark:text-white shadow-[4px_4px_0px_0px_#2d2f2c]"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="label-font text-xs font-black uppercase block mb-2 dark:text-slate-300" data-i18n="modal-priority-label">Độ Ưu Tiên</label>
+                    <select id="taskPriority" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 font-bold focus:outline-none dark:bg-slate-700 dark:text-white">
+                        <option value="low" data-i18n="priority-low">⚪ Khi Nào Rảnh (Thấp)</option>
+                        <option value="medium" data-i18n="priority-mid">🟡 Cũng Phải Làm (Trung Bình)</option>
+                        <option value="high" data-i18n="priority-high">🔴 Benson Mức Đỏ (Cao)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label-font text-xs font-black uppercase block mb-2 dark:text-slate-300" data-i18n="modal-status-label">Trạng Thái</label>
+                    <select id="taskStatus" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 font-bold focus:outline-none dark:bg-slate-700 dark:text-white">
+                        <option value="todo" data-i18n="status-todo">📋 Cần Làm</option>
+                        <option value="doing" data-i18n="status-doing">⚡ Đang Làm</option>
+                        <option value="done" data-i18n="status-done">✅ Hoàn Thành</option>
+                    </select>
+                </div>
+            </div>
+            <div id="assignee-wrapper">
+                <label class="label-font text-xs font-black uppercase block mb-2 dark:text-slate-300">Giao Cho (Assignee)</label>
+                <select id="taskAssignee" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 font-bold focus:outline-none dark:bg-slate-700 dark:text-white">
+                    <option value="">-- Chọn thành viên --</option>
+                </select>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button onclick="addTask()" class="flex-1 bg-primary dark:bg-neon-pink text-white border-2 border-[#2d2f2c] py-3 font-black uppercase tracking-wide shadow-[4px_4px_0px_0px_#4d001c] hover:-translate-y-1 transition-all" data-i18n="modal-submit">TRIỂN KHAI 🚀</button>
+                <button onclick="closeModal()" class="px-6 border-2 border-[#2d2f2c] dark:border-neon-cyan dark:text-neon-cyan font-bold hover:bg-surface-container transition-colors" data-i18n="modal-cancel">HỦY Bỏ</button>
+            </div>
+        </div>
+    </div>
+</div>
+</body></html>

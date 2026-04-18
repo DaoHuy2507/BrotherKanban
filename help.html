@@ -1,0 +1,210 @@
+﻿<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BrotherKanban | Trợ Giúp</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-surface":"#2d2f2c","on-surface-variant":"#5a5c58","surface-container":"#e8e9e3","primary":"#b7004d","primary-container":"#ff7294","on-primary":"#ffeff0","secondary":"#006760","secondary-container":"#7fe6db","tertiary-container":"#feb300","background":"#f7f7f2","midnight":"#0f172a","neon-pink":"#ff007f","neon-cyan":"#00f3ff"},"fontFamily":{"headline":["Epilogue"],"body":["Be Vietnam Pro"],"label":["Space Grotesk"]}}}}</script>
+<style>
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+  body{font-family:'Be Vietnam Pro',sans-serif}h1,h2,h3{font-family:'Epilogue',sans-serif}
+  .label-font{font-family:'Space Grotesk',sans-serif}
+  .cel-shade-card{border:3px solid #2d2f2c;box-shadow:6px 6px 0px 0px #2d2f2c;transition:all .2s ease}
+  .dark .cel-shade-card{border-color:#00f3ff;box-shadow:6px 6px 0px 0px #ff007f}
+  .dark .neon-glow-pink{text-shadow:0 0 8px #ff007f;color:#ff7294}
+  .dark .neon-glow-cyan{text-shadow:0 0 8px #00f3ff;color:#00f3ff}
+  .faq-answer{display:none;} .faq-answer.open{display:block;}
+  @keyframes slide-down{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  .faq-answer.open{animation:slide-down .2s ease}
+</style>
+<script src="./lang.js"></script>
+<script src="./bk-store.js"></script>
+<script src="./bk-realtime.js"></script>
+<script>
+  /* lang.js handles toggleTheme() */
+  function toggleFAQ(btn){
+    const ans=btn.nextElementSibling;const icon=btn.querySelector('.faq-icon');
+    ans.classList.toggle('open');
+    icon.textContent=ans.classList.contains('open')?'−':'+';
+  }
+</script>
+</head>
+<body class="bg-background dark:bg-midnight text-on-surface dark:text-slate-100">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col p-4 space-y-6 z-40 bg-[#e8e9e3] dark:bg-slate-900 border-r-4 border-[#2d2f2c] dark:border-neon-cyan">
+  <div class="flex items-center gap-3 px-2">
+    <div class="w-12 h-12 bg-primary-container border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md overflow-hidden">
+      <img alt="Logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-nZAddATXUnixnquI_8ReEW_nNerUNdJyIgj3QzEjATNT3DeT-c5fy1Qhtlu328p0n18YdHP-nHymlYLGN5IDXq6nI4mdYB1gI6Kw9-xKiL2svY7wqHo-HZZF-_CjUqj8pi-H4ccKH1fkYg39rrp2BQ9XiH2sm51nCvqdrf2NS39lO8Mt6gKJIt1EXQYtCLQh-S9Y-B_t-N9A3ldGgGSyg180y7nC4Utvl7b1hJQiUK65TgGqo0N_Jn3ilqRcoM0RBEWFX6G5qlQ"/>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-[#b7004d] dark:text-neon-pink neon-glow-pink tracking-tighter">The Park</h1>
+      <p class="font-['Space_Grotesk'] text-xs font-medium text-[#2d2f2c] dark:text-neon-cyan opacity-70 uppercase tracking-widest" data-i18n="site-tagline">Quản Lý Công Việc</p>
+    </div>
+  </div>
+  <a href="my_board.html" class="w-full bg-tertiary-container dark:bg-amber-400 text-[#2d2f2c] border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold font-['Space_Grotesk'] flex items-center justify-center gap-2 transition-all">
+    <span class="material-symbols-outlined">add_circle</span> <span data-i18n="btn-new-task">Thêm Task Mới</span>
+  </a>
+  <nav class="flex-1 space-y-2">
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="brotherkanban_dashboard_creative_night/code.html"><span class="material-symbols-outlined">dashboard</span> <span data-i18n="nav-dashboard">Tổng Quan</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="my_board.html"><span class="material-symbols-outlined">view_kanban</span> <span data-i18n="nav-myboard">Bảng Của Tôi</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="team.html"><span class="material-symbols-outlined">group</span> <span data-i18n="nav-team">Đội Ngũ</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="analytics.html"><span class="material-symbols-outlined">insights</span> <span data-i18n="nav-analytics">Thống Kê</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="settings.html"><span class="material-symbols-outlined">settings</span> <span data-i18n="nav-settings">Cài Đặt</span></a>
+  </nav>
+  <div class="space-y-2 pt-6 border-t-2 border-[#2d2f2c]/10 dark:border-neon-cyan/20">
+    <a class="flex items-center gap-3 bg-[#ff7294] dark:bg-neon-pink text-[#2d2f2c] dark:text-white border-2 border-[#2d2f2c] dark:border-white p-2 font-['Space_Grotesk'] font-bold shadow-[2px_2px_0px_0px_rgba(45,47,44,1)]" href="#"><span class="material-symbols-outlined text-xl">help</span> <span data-i18n="nav-help">Trợ Giúp</span></a>
+    <a class="flex items-center gap-3 text-[#b7004d] dark:text-neon-pink p-2 font-['Space_Grotesk'] font-bold hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="#" onclick="event.preventDefault();doLogout();"><span class="material-symbols-outlined text-xl">logout</span> <span data-i18n="nav-logout">Đăng Xuất</span></a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="ml-64 min-h-screen relative">
+  <header class="flex justify-between items-center px-6 py-4 w-full bg-[#f7f7f2] dark:bg-slate-900/80 backdrop-blur-md border-b-4 border-[#2d2f2c] dark:border-neon-pink sticky top-0 z-30">
+    <span class="text-2xl font-black text-[#2d2f2c] dark:text-neon-cyan italic neon-glow-cyan">BrotherKanban</span>
+    <div class="flex items-center gap-4">
+      <button id="lang-toggle-btn" onclick="toggleLanguage()" class="px-3 h-10 border-2 border-[#2d2f2c] dark:border-neon-cyan rounded-md label-font font-black text-sm dark:text-neon-cyan hover:bg-secondary-container transition-colors">🇺🇸 EN</button>
+      <button onclick="toggleTheme()" class="w-10 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md dark:text-neon-pink hover:bg-tertiary-container transition-colors">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">dark_mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="p-8 max-w-3xl relative">
+    <!-- Background Image -->
+    <div class="fixed inset-0 left-64 z-0 pointer-events-none overflow-hidden">
+      <img alt="Park background" class="w-full h-full object-cover opacity-10 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay" src="https://lh3.googleusercontent.com/aida/ADBb0uizYgT99pdp9X-L_qaDnz7PUOQG5ygUQT1Vs5I0m-LSMJUrYobtbOrWDorY9HmAh6k2tdr1iCPpeCf9ViVoI2uz0-vTz-QsHymDXO5G3y8bEuK7DBQ8XOXr1uJlexcNtjuFY5ufjD8DY5Dk41QVUhG9RKhS9Ktisam-xk1StxNeBzjDYz44WAReHkXpI1g7l2zmTNgnmxmk3FXBzvVai2jt9fcsbHQD6hvHZul42Uemp3W-0v9vlT3dh2o"/>
+      <div class="absolute inset-0 bg-transparent dark:bg-midnight/60"></div>
+    </div>
+    <div class="relative z-10">
+    <div class="mb-10">
+      <span class="label-font bg-secondary-container dark:bg-neon-cyan/20 dark:text-neon-cyan px-3 py-1 border-2 border-[#2d2f2c] rounded-full text-xs font-bold uppercase inline-block mb-4" data-i18n="help-badge">SKIPS GIẢI THÍCH</span>
+      <h2 class="text-5xl font-black dark:text-white tracking-tighter mb-2" data-i18n="help-title">Trợ Giúp</h2>
+      <p class="text-lg text-on-surface-variant dark:text-slate-300" data-i18n="help-subtitle">"Mày hỏi tao giải thích. Được rồi, lần này thôi." — Skips</p>
+    </div>
+
+    <!-- Quick Guide -->
+    <div class="cel-shade-card bg-tertiary-container dark:bg-amber-900/20 p-6 mb-8 border-[#2d2f2c] dark:border-amber-400" style="box-shadow:6px 6px 0px 0px #7b5400">
+      <h3 class="text-2xl font-black mb-4">⚡ Bắt Đầu Nhanh</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white/60 dark:bg-slate-800/60 p-4 border-2 border-[#2d2f2c]">
+          <div class="text-3xl mb-2">1️⃣</div>
+          <div class="font-black dark:text-white">Tạo Task</div>
+          <div class="text-sm text-on-surface-variant dark:text-slate-400 mt-1">Ấn "Thêm Task Mới" hoặc nút vàng trong My Board để tạo nhiệm vụ mới.</div>
+        </div>
+        <div class="bg-white/60 dark:bg-slate-800/60 p-4 border-2 border-[#2d2f2c]">
+          <div class="text-3xl mb-2">2️⃣</div>
+          <div class="font-black dark:text-white">Di Chuyển Task</div>
+          <div class="text-sm text-on-surface-variant dark:text-slate-400 mt-1">Ấn "→ Đang Làm" để bắt đầu, rồi "→ Xong Rồi" khi hoàn thành.</div>
+        </div>
+        <div class="bg-white/60 dark:bg-slate-800/60 p-4 border-2 border-[#2d2f2c]">
+          <div class="text-3xl mb-2">3️⃣</div>
+          <div class="font-black dark:text-white">Xem Tiến Độ</div>
+          <div class="text-sm text-on-surface-variant dark:text-slate-400 mt-1">Kéo thanh % khi task đang làm để cập nhật tiến độ thực tế.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="cel-shade-card bg-white dark:bg-slate-800 p-6 mb-8">
+      <h3 class="text-2xl font-black dark:text-white mb-6">❓ Hỏi Đáp — Regular Show Edition</h3>
+      <div class="space-y-2">
+        <!-- FAQ items -->
+        <div class="border-2 border-[#2d2f2c] dark:border-neon-cyan/30">
+          <button onclick="toggleFAQ(this)" class="w-full flex justify-between items-center p-4 font-bold text-left dark:text-white hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+            <span>Làm sao thêm task mới?</span>
+            <span class="faq-icon label-font font-black text-xl">+</span>
+          </button>
+          <div class="faq-answer p-4 text-sm border-t-2 border-[#2d2f2c]/20 dark:border-neon-cyan/20 text-on-surface-variant dark:text-slate-400">
+            Ấn nút vàng <strong>"Thêm Task Mới"</strong> ở sidebar, hoặc nút hồng đỏ trong My Board. Điền tên, mô tả, mức độ ưu tiên và trạng thái. Benson sẽ hài lòng (hiếm khi).
+          </div>
+        </div>
+        <div class="border-2 border-[#2d2f2c] dark:border-neon-cyan/30">
+          <button onclick="toggleFAQ(this)" class="w-full flex justify-between items-center p-4 font-bold text-left dark:text-white hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+            <span>Tại sao Benson nổi giận?</span>
+            <span class="faq-icon label-font font-black text-xl">+</span>
+          </button>
+          <div class="faq-answer p-4 text-sm border-t-2 border-[#2d2f2c]/20 dark:border-neon-cyan/20 text-on-surface-variant dark:text-slate-400">
+            Benson nổi giận vì task của bạn đang <strong>quá hạn</strong>. Xem tab Thống Kê để kiểm tra. Hoặc cũng có thể vì Rigby lại ngủ muộn — không liên quan đến bạn.
+          </div>
+        </div>
+        <div class="border-2 border-[#2d2f2c] dark:border-neon-cyan/30">
+          <button onclick="toggleFAQ(this)" class="w-full flex justify-between items-center p-4 font-bold text-left dark:text-white hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+            <span>Dữ liệu có bị mất khi tắt trình duyệt không?</span>
+            <span class="faq-icon label-font font-black text-xl">+</span>
+          </button>
+          <div class="faq-answer p-4 text-sm border-t-2 border-[#2d2f2c]/20 dark:border-neon-cyan/20 text-on-surface-variant dark:text-slate-400">
+            <strong>Không</strong> — dữ liệu được lưu vào <code>localStorage</code> của trình duyệt. Tắt máy, mở lại vẫn còn. Trừ khi bạn xóa cache trình duyệt hoặc nhấn "Reset toàn bộ" trong Cài Đặt. Khi đó Skips cũng không cứu được.
+          </div>
+        </div>
+        <div class="border-2 border-[#2d2f2c] dark:border-neon-cyan/30">
+          <button onclick="toggleFAQ(this)" class="w-full flex justify-between items-center p-4 font-bold text-left dark:text-white hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+            <span>Sprint là gì? Tôi có cần không?</span>
+            <span class="faq-icon label-font font-black text-xl">+</span>
+          </button>
+          <div class="faq-answer p-4 text-sm border-t-2 border-[#2d2f2c]/20 dark:border-neon-cyan/20 text-on-surface-variant dark:text-slate-400">
+            Sprint là nhóm task có thời hạn cụ thể — kiểu như Benson giao nhiệm vụ theo tuần. Tạo Sprint ở tab Sprint, gán task vào, rồi theo dõi tiến độ. Bạn <em>nên</em> dùng nếu thích làm có tổ chức.
+          </div>
+        </div>
+        <div class="border-2 border-[#2d2f2c] dark:border-neon-cyan/30">
+          <button onclick="toggleFAQ(this)" class="w-full flex justify-between items-center p-4 font-bold text-left dark:text-white hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+            <span>Skips có giỏi thật không?</span>
+            <span class="faq-icon label-font font-black text-xl">+</span>
+          </button>
+          <div class="faq-answer p-4 text-sm border-t-2 border-[#2d2f2c]/20 dark:border-neon-cyan/20 text-on-surface-variant dark:text-slate-400">
+            <strong>Có.</strong> Ông ấy được trừ bất tử vì bị nguyền rủa. Và ông ấy đã fix bug của app này 3000 năm trước khi app này ra đời. Đừng hỏi thêm.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="cel-shade-card bg-white dark:bg-slate-800 p-6 mb-8">
+      <h3 class="text-2xl font-black dark:text-white mb-4">⌨️ Phím Tắt</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="flex justify-between items-center p-3 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c]/20 dark:border-neon-cyan/20">
+          <span class="text-sm dark:text-slate-300">Thêm task mới</span>
+          <kbd class="label-font text-xs font-black bg-[#2d2f2c] dark:bg-neon-pink text-white px-2 py-1">N</kbd>
+        </div>
+        <div class="flex justify-between items-center p-3 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c]/20 dark:border-neon-cyan/20">
+          <span class="text-sm dark:text-slate-300">Đổi giao diện sáng/tối</span>
+          <kbd class="label-font text-xs font-black bg-[#2d2f2c] dark:bg-neon-pink text-white px-2 py-1">D</kbd>
+        </div>
+        <div class="flex justify-between items-center p-3 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c]/20 dark:border-neon-cyan/20">
+          <span class="text-sm dark:text-slate-300">Đổi ngôn ngữ</span>
+          <kbd class="label-font text-xs font-black bg-[#2d2f2c] dark:bg-neon-pink text-white px-2 py-1">L</kbd>
+        </div>
+        <div class="flex justify-between items-center p-3 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c]/20 dark:border-neon-cyan/20">
+          <span class="text-sm dark:text-slate-300">Về Dashboard</span>
+          <kbd class="label-font text-xs font-black bg-[#2d2f2c] dark:bg-neon-pink text-white px-2 py-1">H</kbd>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="cel-shade-card bg-primary-container dark:bg-neon-pink/10 p-6">
+      <h3 class="text-2xl font-black mb-2 dark:text-white">📨 Vẫn Cần Giúp?</h3>
+      <p class="text-on-surface-variant dark:text-slate-300 mb-4">Gửi yêu cầu cho Pops. Ông ấy muốn giúp mọi người và sẽ trả lời bằng: "Jolly good show!" nhưng ít nhất là đọc email.</p>
+      <a href="mailto:support@thepark.local" class="inline-block bg-primary dark:bg-neon-pink text-white border-2 border-[#2d2f2c] px-6 py-3 font-black uppercase shadow-[4px_4px_0px_0px_#4d001c] hover:-translate-y-1 transition-all">
+        📧 Liên Hệ Hỗ Trợ
+      </a>
+    </div>
+    </div><!-- end z-10 -->
+  </main>
+</div>
+
+<script>
+  // Keyboard shortcut wiring
+  document.addEventListener('keydown', e => {
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+    if(e.key==='n'||e.key==='N') window.location.href='my_board.html';
+    if(e.key==='d'||e.key==='D') toggleTheme();
+    if(e.key==='l'||e.key==='L') toggleLanguage();
+    if(e.key==='h'||e.key==='H') window.location.href='brotherkanban_dashboard_creative_night/code.html';
+  });
+</script>
+
+<script>document.addEventListener('DOMContentLoaded', function(){ BKRealtime.init(); });</script>
+</body></html>

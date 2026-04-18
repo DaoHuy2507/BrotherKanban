@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BrotherKanban | Cài Đặt</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-surface":"#2d2f2c","on-surface-variant":"#5a5c58","surface-container":"#e8e9e3","surface-container-lowest":"#ffffff","primary":"#b7004d","primary-container":"#ff7294","on-primary":"#ffeff0","secondary":"#006760","secondary-container":"#7fe6db","tertiary-container":"#feb300","background":"#f7f7f2","midnight":"#0f172a","neon-pink":"#ff007f","neon-cyan":"#00f3ff","error":"#b31b25"},"fontFamily":{"headline":["Epilogue"],"body":["Be Vietnam Pro"],"label":["Space Grotesk"]}}}}</script>
+<style>
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+  body{font-family:'Be Vietnam Pro',sans-serif}h1,h2,h3{font-family:'Epilogue',sans-serif}
+  .label-font{font-family:'Space Grotesk',sans-serif}
+  .cel-shade-card{border:3px solid #2d2f2c;box-shadow:6px 6px 0px 0px #2d2f2c}
+  .dark .cel-shade-card{border-color:#00f3ff;box-shadow:6px 6px 0px 0px #ff007f}
+  .dark .neon-glow-pink{text-shadow:0 0 8px #ff007f;color:#ff7294}
+  .dark .neon-glow-cyan{text-shadow:0 0 8px #00f3ff;color:#00f3ff}
+  .toggle-switch{position:relative;display:inline-block;width:48px;height:26px}
+  .toggle-switch input{opacity:0;width:0;height:0}
+  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:#adada9;border:2px solid #2d2f2c;transition:.3s;border-radius:99px}
+  .toggle-slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:white;transition:.3s;border-radius:50%}
+  input:checked+.toggle-slider{background:#b7004d}
+  input:checked+.toggle-slider:before{transform:translateX(22px)}
+  .setting-row{transition:background-color .2s}
+  .setting-row:hover{background-color:rgba(45,47,44,.04)}
+  .dark .setting-row:hover{background-color:rgba(255,255,255,.04)}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;align-items:center;justify-content:center}
+  .modal-overlay.active{display:flex}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./bk-supabase.js"></script>
+<script>
+  function toggleTheme(){
+    const h=document.documentElement;const was=h.classList.contains('dark');
+    h.classList.toggle('dark');localStorage.setItem('bk-theme',was?'light':'dark');
+    document.getElementById('themeToggle').checked=!was;
+  }
+
+  /* ─── Lấy profile từ bk-current-user (Supabase cache) ─── */
+  function getCurrentProfile() {
+    try {
+      const raw = localStorage.getItem('bk-current-user');
+      return raw ? JSON.parse(raw) : null;
+    } catch(_) { return null; }
+  }
+
+  /* ===== LOAD SETTINGS FROM SUPABASE PROFILE ===== */
+  function loadSettings(){
+    const profile = getCurrentProfile();
+
+    if (profile) {
+      // Fill from Supabase profile
+      document.getElementById('sName').value  = profile.name || '';
+      document.getElementById('sEmail').value = (profile.name || '').toLowerCase() + '@brotherkanban.app';
+      document.getElementById('sEmoji').value = profile.emoji || '😊';
+      document.getElementById('sBio').value   = profile.bio || '';
+
+      // Show role badge
+      const roleBadge = document.getElementById('role-badge');
+      if (roleBadge) {
+        roleBadge.textContent = profile.role === 'manager' ? '👑 Manager' : '👤 Member';
+        roleBadge.className   = roleBadge.className.replace(/bg-\S+/, profile.role === 'manager' ? 'bg-yellow-200' : 'bg-cyan-100');
+      }
+
+      // Hide Danger Zone for non-managers
+      const dangerZone = document.getElementById('danger-zone');
+      if (dangerZone && profile.role !== 'manager') {
+        dangerZone.style.display = 'none';
+      }
+    } else {
+      // Fallback: dùng BKStore nếu chưa login Supabase
+      const user = typeof BKStore !== 'undefined' ? BKStore.getUser() : {};
+      document.getElementById('sName').value  = user.displayName || '';
+      document.getElementById('sEmail').value = user.email || '';
+      document.getElementById('sEmoji').value = user.avatarEmoji || '😊';
+      document.getElementById('sBio').value   = user.bio || '';
+    }
+
+    // Theme
+    document.getElementById('themeToggle').checked = document.documentElement.classList.contains('dark');
+    // Notifications
+    document.getElementById('notifDeadline').checked = localStorage.getItem('bk-notif-deadline') === 'true';
+    document.getElementById('notifSound').checked    = localStorage.getItem('bk-notif-sound') === 'true';
+    // Language
+    document.getElementById('sLang').value = localStorage.getItem('bk-lang') || 'vi';
+    // Preview avatar
+    updateAvatarPreview();
+  }
+
+  function updateAvatarPreview(){
+    const emoji = document.getElementById('sEmoji')?.value || '😊';
+    const el = document.getElementById('avatarPreview');
+    if(el) el.textContent = emoji;
+  }
+
+  /* ===== SAVE PROFILE ===== */
+  async function saveProfile(){
+    const profile = getCurrentProfile();
+    const newEmoji = document.getElementById('sEmoji').value.trim() || '😊';
+    const newBio   = document.getElementById('sBio').value.trim();
+
+    if (profile && typeof BKSupabase !== 'undefined') {
+      try {
+        // Update Supabase profiles table
+        const updated = await BKSupabase.upsertProfile({
+          id   : profile.id,
+          name : profile.name, // name (character) không đổi được
+          emoji: newEmoji,
+          role : profile.role,
+          capacity: profile.capacity,
+        });
+        showToast('✓ Hồ sơ đã được lưu lên Supabase! YYYEAHHH!', 'green');
+      } catch(e) {
+        showToast('❌ Lỗi lưu: ' + e.message, 'red');
+      }
+    } else {
+      // Fallback: chỉ lưu localStorage
+      if (typeof BKStore !== 'undefined') {
+        const user = BKStore.getUser();
+        user.avatarEmoji = newEmoji;
+        user.bio = newBio;
+        BKStore.saveUser(user);
+      }
+      showToast('✓ Hồ sơ đã lưu (offline mode)!', 'green');
+    }
+
+    // Always update local cache
+    if (profile) {
+      profile.emoji = newEmoji;
+      localStorage.setItem('bk-current-user', JSON.stringify(profile));
+    }
+    updateAvatarPreview();
+  }
+
+  /* ===== CHANGE PASSWORD via Supabase ===== */
+  async function changePassword(){
+    const nw   = document.getElementById('sNewPw').value;
+    const conf = document.getElementById('sConfPw').value;
+    if(!nw){ showToast('Điền mật khẩu mới đi bạn ơi!','red'); return; }
+    if(nw !== conf){ showToast('Mật khẩu mới không khớp! Rigby gõ nhầm rồi.','red'); return; }
+    if(nw.length < 6){ showToast('Mật khẩu cần ít nhất 6 ký tự. Benson yêu cầu vậy.','red'); return; }
+
+    if (typeof BKSupabase !== 'undefined') {
+      try {
+        const { error } = await BKSupabase.client().auth.updateUser({ password: nw });
+        if (error) throw error;
+        document.getElementById('sNewPw').value  = '';
+        document.getElementById('sConfPw').value = '';
+        document.getElementById('sCurPw').value  = '';
+        showToast('✓ Mật khẩu đã đổi thành công! Benson ghi nhận.', 'green');
+      } catch(e) {
+        showToast('❌ Lỗi đổi mật khẩu: ' + e.message, 'red');
+      }
+    } else {
+      showToast('✓ Mật khẩu đã đổi! (Offline mode)', 'green');
+    }
+  }
+
+  /* ===== SAVE PREFERENCES ===== */
+  function savePrefs(){
+    const lang = document.getElementById('sLang').value;
+    localStorage.setItem('bk-lang', lang);
+    localStorage.setItem('bk-notif-deadline', document.getElementById('notifDeadline').checked);
+    localStorage.setItem('bk-notif-sound',    document.getElementById('notifSound').checked);
+    if(typeof applyLanguage==='function') applyLanguage(lang);
+    showToast('✓ Cài đặt đã được lưu! Benson gật đầu.','green');
+  }
+
+  /* ===== DANGER ZONE ===== */
+  function clearAllTasks(){
+    if(!confirm('RIGBY CẢNH BÁO: Xóa hết tất cả task?? KHÔNG THỂ HOÀN TÁC! Benson sẽ nổi giận!')) return;
+    if(typeof BKStore !== 'undefined') BKStore.clearAllTasks();
+    showToast('🗑️ Đã xóa tất cả task. Bảng trống như não Rigby.','red');
+  }
+
+  function resetAll(){
+    if(!confirm('SKIPS CẢNH BÁO CỰC KỲ NGHIÊM TÚC: Reset toàn bộ dữ liệu về mặc định? Mọi thứ sẽ mất!')) return;
+    if(typeof BKStore !== 'undefined') BKStore.resetToDefault();
+    showToast('🔄 Đã reset về dữ liệu mặc định! Như ngày đầu mới đến The Park.','green');
+    setTimeout(()=>location.reload(),1500);
+  }
+
+  /* ===== LOGOUT ===== */
+  function doLogout() { window.doLogout(); }
+
+  /* ===== TOAST ===== */
+  function showToast(msg,type='green'){
+    const t=document.getElementById('toast');
+    t.textContent=msg;
+    t.className=`fixed bottom-6 right-6 px-5 py-3 font-bold label-font text-sm border-2 border-[#2d2f2c] shadow-[4px_4px_0px_0px_#2d2f2c] z-50 transition-all ${type==='green'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`;
+    t.style.display='block';
+    setTimeout(()=>{ t.style.display='none'; },2500);
+  }
+
+  document.addEventListener('DOMContentLoaded', loadSettings);
+</script>
+<script src="./lang.js"></script>
+<script src="./bk-store.js"></script>
+<script src="./bk-realtime.js"></script>
+</head>
+<body class="bg-background dark:bg-midnight text-on-surface dark:text-slate-100">
+
+<div id="toast" style="display:none" class="fixed bottom-6 right-6 z-50"></div>
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col p-4 space-y-6 z-40 bg-[#e8e9e3] dark:bg-slate-900 border-r-4 border-[#2d2f2c] dark:border-neon-cyan">
+  <div class="flex items-center gap-3 px-2">
+    <div class="w-12 h-12 bg-primary-container border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md overflow-hidden">
+      <img alt="Logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-nZAddATXUnixnquI_8ReEW_nNerUNdJyIgj3QzEjATNT3DeT-c5fy1Qhtlu328p0n18YdHP-nHymlYLGN5IDXq6nI4mdYB1gI6Kw9-xKiL2svY7wqHo-HZZF-_CjUqj8pi-H4ccKH1fkYg39rrp2BQ9XiH2sm51nCvqdrf2NS39lO8Mt6gKJIt1EXQYtCLQh-S9Y-B_t-N9A3ldGgGSyg180y7nC4Utvl7b1hJQiUK65TgGqo0N_Jn3ilqRcoM0RBEWFX6G5qlQ"/>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-[#b7004d] dark:text-neon-pink neon-glow-pink tracking-tighter">The Park</h1>
+      <p class="font-['Space_Grotesk'] text-xs font-medium text-[#2d2f2c] dark:text-neon-cyan opacity-70 uppercase tracking-widest" data-i18n="site-tagline">Quản Lý Công Việc</p>
+    </div>
+  </div>
+  <a href="my_board.html" class="w-full bg-tertiary-container dark:bg-amber-400 text-[#2d2f2c] border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold font-['Space_Grotesk'] flex items-center justify-center gap-2 transition-all">
+    <span class="material-symbols-outlined">add_circle</span> <span data-i18n="btn-new-task">Thêm Task Mới</span>
+  </a>
+  <nav class="flex-1 space-y-2">
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="brotherkanban_dashboard_creative_night/code.html"><span class="material-symbols-outlined">dashboard</span> <span data-i18n="nav-dashboard">Tổng Quan</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="my_board.html"><span class="material-symbols-outlined">view_kanban</span> <span data-i18n="nav-myboard">Bảng Của Tôi</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="team.html"><span class="material-symbols-outlined">group</span> <span data-i18n="nav-team">Đội Ngũ</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="analytics.html"><span class="material-symbols-outlined">insights</span> <span data-i18n="nav-analytics">Thống Kê</span></a>
+    <a class="flex items-center gap-3 bg-[#ff7294] dark:bg-neon-pink text-[#2d2f2c] dark:text-white border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold shadow-[4px_4px_0px_0px_rgba(45,47,44,1)] transition-all" href="#"><span class="material-symbols-outlined">settings</span> <span data-i18n="nav-settings">Cài Đặt</span></a>
+  </nav>
+  <div class="space-y-2 pt-6 border-t-2 border-[#2d2f2c]/10 dark:border-neon-cyan/20">
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-400 p-2 font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="help.html"><span class="material-symbols-outlined text-xl">help</span> <span data-i18n="nav-help">Trợ Giúp</span></a>
+    <button onclick="doLogout()" class="flex w-full items-center gap-3 text-[#b7004d] dark:text-neon-pink p-2 font-['Space_Grotesk'] font-bold hover:bg-[#dcddd7] dark:hover:bg-slate-800"><span class="material-symbols-outlined text-xl">logout</span> <span data-i18n="nav-logout">Đăng Xuất</span></button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="ml-64 min-h-screen relative overflow-hidden">
+  <!-- TOPBAR -->
+  <header class="flex justify-between items-center px-6 py-4 w-full bg-[#f7f7f2] dark:bg-slate-900/80 backdrop-blur-md border-b-4 border-[#2d2f2c] dark:border-neon-pink sticky top-0 z-30">
+    <span class="text-2xl font-black text-[#2d2f2c] dark:text-neon-cyan italic neon-glow-cyan">BrotherKanban</span>
+    <div class="flex items-center gap-4">
+      <button id="lang-toggle-btn" onclick="toggleLanguage()" class="px-3 h-10 border-2 border-[#2d2f2c] dark:border-neon-cyan rounded-md label-font font-black text-sm dark:text-neon-cyan hover:bg-secondary-container transition-colors">🇺🇸 EN</button>
+      <button onclick="toggleTheme()" class="w-10 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md dark:text-neon-pink hover:bg-tertiary-container transition-colors">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">dark_mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="p-8 relative">
+    <!-- Background Image -->
+    <div class="fixed inset-0 left-64 z-0 pointer-events-none overflow-hidden">
+      <img alt="Park background" class="w-full h-full object-cover opacity-10 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay" src="https://lh3.googleusercontent.com/aida/ADBb0uizYgT99pdp9X-L_qaDnz7PUOQG5ygUQT1Vs5I0m-LSMJUrYobtbOrWDorY9HmAh6k2tdr1iCPpeCf9ViVoI2uz0-vTz-QsHymDXO5G3y8bEuK7DBQ8XOXr1uJlexcNtjuFY5ufjD8DY5Dk41QVUhG9RKhS9Ktisam-xk1StxNeBzjDYz44WAReHkXpI1g7l2zmTNgnmxmk3FXBzvVai2jt9fcsbHQD6hvHZul42Uemp3W-0v9vlT3dh2o"/>
+      <div class="absolute inset-0 bg-transparent dark:bg-midnight/60"></div>
+    </div>
+    <div class="relative z-10">
+    <section class="mb-10">
+      <span class="label-font bg-secondary-container dark:bg-neon-cyan/20 dark:text-neon-cyan px-3 py-1 border-2 border-[#2d2f2c] rounded-full text-xs font-bold uppercase inline-block mb-4" data-i18n="settings-badge">BẢNG ĐIỀU KHIỂN</span>
+      <h2 class="text-5xl font-black dark:text-white tracking-tighter mb-2" data-i18n="settings-title">Cài Đặt</h2>
+      <p class="text-lg text-on-surface-variant dark:text-slate-300" data-i18n="settings-subtitle">"Skips nói cài đặt đúng sẽ tiết kiệm 3000 năm." — Benson, gật đầu</p>
+    </section>
+
+    <div class="max-w-2xl space-y-8">
+
+      <!-- Profile Section -->
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+        <div class="flex items-center gap-4 mb-6">
+          <div id="avatarPreview" class="w-20 h-20 text-5xl flex items-center justify-center bg-primary-container dark:bg-neon-pink/20 border-4 border-[#2d2f2c] dark:border-neon-pink rounded-full cursor-pointer">😊</div>
+          <div>
+            <h3 class="text-2xl font-black dark:text-white">Hồ Sơ Cá Nhân</h3>
+            <p class="text-sm text-on-surface-variant dark:text-slate-400">Thông tin hiển thị cho cả The Park thấy</p>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="label-font text-xs font-black uppercase block mb-1 dark:text-slate-300">Tên Hiển Thị</label>
+            <input id="sName" type="text" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 font-bold focus:outline-none dark:bg-slate-700 dark:text-white" placeholder="Tên của bạn"/>
+          </div>
+          <div>
+            <label class="label-font text-xs font-black uppercase block mb-1 dark:text-slate-300">Email</label>
+            <input id="sEmail" type="email" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 focus:outline-none dark:bg-slate-700 dark:text-white" placeholder="email@thepark.local"/>
+          </div>
+          <div>
+            <label class="label-font text-xs font-black uppercase block mb-1 dark:text-slate-300">Emoji Đại Diện</label>
+            <input id="sEmoji" type="text" maxlength="2" oninput="updateAvatarPreview()" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 text-3xl focus:outline-none dark:bg-slate-700 dark:text-white" placeholder="😊"/>
+          </div>
+          <div>
+            <label class="label-font text-xs font-black uppercase block mb-1 dark:text-slate-300">Bio (Không bắt buộc)</label>
+            <textarea id="sBio" rows="2" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 text-sm focus:outline-none dark:bg-slate-700 dark:text-white" placeholder="VD: Chuyên gia ngủ nướng, đẳng cấp Rigby..."></textarea>
+          </div>
+          <button onclick="saveProfile()" class="w-full bg-primary dark:bg-neon-pink text-white border-2 border-[#2d2f2c] py-3 font-black uppercase tracking-wide shadow-[4px_4px_0px_0px_#4d001c] hover:-translate-y-1 transition-all">LƯU HỒ SƠ 💾</button>
+        </div>
+      </div>
+
+      <!-- Password Section -->
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-2xl font-black dark:text-white mb-4">🔐 Đổi Mật Khẩu</h3>
+        <div class="space-y-4">
+          <input id="sCurPw" type="password" placeholder="Mật khẩu hiện tại" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 focus:outline-none dark:bg-slate-700 dark:text-white"/>
+          <input id="sNewPw" type="password" placeholder="Mật khẩu mới (≥6 ký tự)" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 focus:outline-none dark:bg-slate-700 dark:text-white"/>
+          <input id="sConfPw" type="password" placeholder="Xác nhận mật khẩu mới" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan p-3 focus:outline-none dark:bg-slate-700 dark:text-white"/>
+          <button onclick="changePassword()" class="w-full border-2 border-[#2d2f2c] dark:border-neon-cyan py-3 font-black uppercase dark:text-neon-cyan hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">ĐỔI MẬT KHẨU 🔑</button>
+        </div>
+      </div>
+
+      <!-- Preferences Section -->
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-2xl font-black dark:text-white mb-4">⚙️ Tuỳ Chọn</h3>
+        <div class="space-y-4">
+          <!-- Dark mode -->
+          <div class="setting-row flex items-center justify-between p-3 -mx-3 rounded">
+            <div>
+              <div class="font-bold dark:text-white">Giao Diện Tối</div>
+              <div class="text-sm text-on-surface-variant dark:text-slate-400">Bảo vệ mắt — Benson cũng thích tối khi tức giận</div>
+            </div>
+            <label class="toggle-switch">
+              <input id="themeToggle" type="checkbox" onchange="toggleTheme()"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <!-- Language -->
+          <div class="setting-row flex items-center justify-between p-3 -mx-3 rounded">
+            <div>
+              <div class="font-bold dark:text-white">Ngôn Ngữ</div>
+              <div class="text-sm text-on-surface-variant dark:text-slate-400">Tiếng Việt hoặc English — chọn đi đừng đứng mãi</div>
+            </div>
+            <select id="sLang" class="border-2 border-[#2d2f2c] dark:border-neon-cyan p-2 label-font font-bold text-sm dark:bg-slate-700 dark:text-white focus:outline-none">
+              <option value="vi">🇻🇳 Tiếng Việt</option>
+              <option value="en">🇺🇸 English</option>
+            </select>
+          </div>
+          <!-- Deadline notification -->
+          <div class="setting-row flex items-center justify-between p-3 -mx-3 rounded">
+            <div>
+              <div class="font-bold dark:text-white">Nhắc Nhở Deadline</div>
+              <div class="text-sm text-on-surface-variant dark:text-slate-400">Benson sẽ nhắc thay bạn — dữ hơn cả deadline</div>
+            </div>
+            <label class="toggle-switch">
+              <input id="notifDeadline" type="checkbox"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <!-- Sound -->
+          <div class="setting-row flex items-center justify-between p-3 -mx-3 rounded">
+            <div>
+              <div class="font-bold dark:text-white">Âm Thanh Thông Báo</div>
+              <div class="text-sm text-on-surface-variant dark:text-slate-400">Bật để nghe Rigby hét mỗi khi có task mới</div>
+            </div>
+            <label class="toggle-switch">
+              <input id="notifSound" type="checkbox"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <button onclick="savePrefs()" class="w-full bg-secondary text-white border-2 border-[#2d2f2c] py-3 font-black uppercase tracking-wide shadow-[4px_4px_0px_0px_#003d38] hover:-translate-y-1 transition-all">LƯU TUỲ CHỌN ✓</button>
+        </div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div id="danger-zone" class="cel-shade-card bg-red-50 dark:bg-red-900/20 p-6 border-red-400 dark:border-red-500" style="box-shadow: 6px 6px 0px 0px #ef4444">
+        <h3 class="text-2xl font-black text-red-700 dark:text-red-400 mb-2">☠️ Vùng Nguy Hiểm</h3>
+        <p class="text-sm text-red-600 dark:text-red-300 mb-5">Benson: "ĐỪNG ẤN MẤY NÚT NÀY TRỪ KHI BẠN THẬT SỰ BIẾT MÌNH ĐANG LÀM GÌ!"</p>
+        <div class="space-y-3">
+          <button onclick="clearAllTasks()" class="w-full border-2 border-red-500 text-red-600 dark:text-red-400 py-3 font-black uppercase hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+            🗑️ XÓA TẤT CẢ TASK
+          </button>
+          <button onclick="resetAll()" class="w-full bg-red-600 text-white border-2 border-red-800 py-3 font-black uppercase shadow-[4px_4px_0px_0px_#7f1d1d] hover:-translate-y-1 transition-all">
+            ⚠️ RESET TOÀN BỘ DỮ LIỆU
+          </button>
+        </div>
+      </div>
+
+    </div><!-- end z-10 -->
+  </main>
+</div>
+
+<script>document.addEventListener('DOMContentLoaded', function(){ BKRealtime.init(); });</script>
+</body></html>

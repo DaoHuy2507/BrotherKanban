@@ -1,0 +1,577 @@
+﻿<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BrotherKanban | Thống Kê</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-surface":"#2d2f2c","on-surface-variant":"#5a5c58","surface-container":"#e8e9e3","primary":"#b7004d","primary-container":"#ff7294","on-primary":"#ffeff0","secondary":"#006760","secondary-container":"#7fe6db","tertiary-container":"#feb300","background":"#f7f7f2","midnight":"#0f172a","neon-pink":"#ff007f","neon-cyan":"#00f3ff"},fontFamily:{headline:["Epilogue"],body:["Be Vietnam Pro"],label:["Space Grotesk"]}}}}</script>
+<style>
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+  body{font-family:'Be Vietnam Pro',sans-serif}h1,h2,h3,h4{font-family:'Epilogue',sans-serif}
+  .lf{font-family:'Space Grotesk',sans-serif}
+  .card{border:3px solid #2d2f2c;box-shadow:6px 6px 0 #2d2f2c;transition:all .2s}
+  .dark .card{border-color:#00f3ff;box-shadow:6px 6px 0 #ff007f}
+  .dark .neon-pink-t{color:#ff7294;text-shadow:0 0 8px #ff007f}
+  .dark .neon-cyan-t{color:#00f3ff;text-shadow:0 0 8px #00f3ff}
+  .bar-h{transition:width .9s cubic-bezier(.4,0,.2,1)}
+  .bar-v{transition:height .9s cubic-bezier(.4,0,.2,1)}
+  /* Tooltip */
+  .tooltip{position:relative}
+  .tooltip:hover .tt-text{opacity:1;transform:translateY(0)}
+  .tt-text{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%) translateY(4px);background:#2d2f2c;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;padding:4px 8px;white-space:nowrap;opacity:0;transition:all .15s;pointer-events:none;z-index:10}
+  .dark .tt-text{background:#00f3ff;color:#0f172a}
+</style>
+<script src="./lang.js"></script>
+<script src="./bk-store.js"></script>
+<script src="./bk-realtime.js"></script>
+<script>
+/* lang.js handles toggleTheme() and applyLanguage() */
+function t(key) {
+  const lang = localStorage.getItem('bk-lang') || 'vi';
+  return (typeof TRANSLATIONS !== 'undefined' && TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ? TRANSLATIONS[lang][key] : key;
+}
+
+/* ===== MAIN RENDER ===== */
+function renderAnalytics(){
+  const lang    = localStorage.getItem('bk-lang') || 'vi';
+  const tasks    = BKStore.getTasks();
+  const members  = BKStore.getMemberTaskCounts();
+  const stats    = BKStore.getStats();
+  const balance  = BKStore.getTeamBalanceScore();
+
+  // === KPI CARDS ===
+  document.getElementById('kpi-total').textContent       = stats.total;
+  document.getElementById('kpi-done').textContent        = stats.done;
+  document.getElementById('kpi-doing').textContent       = stats.doing;
+  document.getElementById('kpi-overdue').textContent     = stats.overdue;
+  document.getElementById('kpi-rate').textContent        = stats.completion + '%';
+  document.getElementById('kpi-balance').textContent     = balance + '%';
+
+  // === TEAM EFFICIENCY RANKING ===
+  try { renderEfficiencyLeaderboard(members); } catch(e){ console.warn('eff board',e); }
+
+  // === WORKLOAD BALANCE CHART ===
+  try { renderWorkloadChart(members); } catch(e){ console.warn('workload',e); }
+
+  // === SMART INSIGHTS ===
+  try { renderInsights(tasks, members, stats, balance); } catch(e){ console.warn('insights',e); }
+
+  // === PRIORITY BREAKDOWN ===
+  try { renderPriorityBreakdown(tasks); } catch(e){ console.warn('priority',e); }
+
+  // === STATUS DONUT ===
+  try { renderStatusDist(stats); } catch(e){ console.warn('status dist',e); }
+
+  // === WEEKLY ACTIVITY ===
+  try { renderWeeklyActivity(tasks); } catch(e){ console.warn('weekly',e); }
+}
+
+/* ------- EFFICIENCY LEADERBOARD ------- */
+function renderEfficiencyLeaderboard(members){
+  const sorted = [...members]
+    .map(m=>({ ...m, eff: BKStore.getMemberEfficiencyScore(m.name) }))
+    .sort((a,b)=>b.eff - a.eff);
+
+  document.getElementById('eff-board').innerHTML = sorted.map((m,i)=>{
+    const effColor = m.eff>=70?'text-green-600 dark:text-green-400':m.eff>=40?'text-amber-600 dark:text-amber-400':'text-red-500';
+    const workload = BKStore.getMemberWorkloadScore(m.name);
+    const medals   = ['🥇','🥈','🥉'];
+    const medal    = medals[i] || `#${i+1}`;
+    const grade    = m.eff>=80?'S':m.eff>=65?'A':m.eff>=50?'B':m.eff>=35?'C':'D';
+    const gradeColor= grade==='S'?'bg-yellow-400 text-yellow-900':grade==='A'?'bg-green-500 text-white':grade==='B'?'bg-blue-500 text-white':grade==='C'?'bg-amber-500 text-white':'bg-red-500 text-white';
+    return `
+    <div class="flex items-center gap-3 p-3 border-b border-[#2d2f2c]/10 dark:border-neon-cyan/10 last:border-0 hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">
+      <span class="text-xl w-8 text-center">${medal}</span>
+      <span class="text-2xl">${m.emoji||'👤'}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-black dark:text-white text-sm">${bkEscHtml(m.name)}</span>
+          <span class="lf text-[9px] font-black px-1.5 py-0.5 ${gradeColor}">Grade ${grade}</span>
+        </div>
+        <div class="flex items-center gap-1 mt-0.5">
+          <div class="w-28 h-2 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c]/30 overflow-hidden">
+            <div class="h-full ${m.eff>=70?'bg-green-500':m.eff>=40?'bg-amber-400':'bg-red-400'} bar-h" style="width:${m.eff}%"></div>
+          </div>
+          <span class="lf text-[10px] font-black ${effColor}">${m.eff}%</span>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="lf text-xs font-black dark:text-slate-300">${m.doneCount} ${t('anal-eff-done')} / ${m.totalCount||0} ${t('anal-eff-total')}</div>
+        <div class="lf text-[10px] text-on-surface-variant dark:text-slate-500">${t('anal-eff-load')}: ${workload}% · ${t('anal-eff-trust')}: ${m.reliability||0}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Who is the recommended person for next task?
+  const mvp = sorted[0];
+  if(mvp){
+    document.getElementById('mvp-name').textContent = `${mvp.emoji} ${mvp.name}`;
+    document.getElementById('mvp-score').textContent = `${t('anal-mvp-score')} ${mvp.eff}% — ${mvp.doneCount} ${t('anal-mvp-done')}`;
+  }
+}
+
+/* ------- WORKLOAD BALANCE CHART ------- */
+function renderWorkloadChart(members){
+  const container = document.getElementById('workload-chart');
+  container.innerHTML = members.map(m=>{
+    const active  = m.doingCount + m.todoCount;
+    const cap     = m.capacity || 5;
+    const pct     = Math.min(100, Math.round(active/cap*100));
+    const overload= active > cap;
+    const barColor= pct>=80?'bg-red-500 dark:bg-red-400':pct>=50?'bg-amber-400':'bg-green-500 dark:bg-green-400';
+    const effScore= BKStore.getMemberEfficiencyScore(m.name);
+    return `
+    <div class="tooltip flex items-center gap-3 py-2 border-b border-[#2d2f2c]/10 dark:border-neon-cyan/10 last:border-0">
+      <span class="text-xl w-6">${m.emoji||'👤'}</span>
+      <span class="lf text-xs font-bold w-24 dark:text-slate-300 truncate">${bkEscHtml(m.name)}</span>
+      <div class="flex-1 h-5 bg-surface-container dark:bg-slate-700 border-2 border-[#2d2f2c] dark:border-neon-cyan overflow-hidden relative">
+        <div class="h-full ${barColor} bar-h flex items-center pl-2" style="width:${pct}%">
+          ${pct>15?`<span class="lf text-[10px] font-black text-white">${active}/${cap}</span>`:''}
+        </div>
+        ${pct<=15?`<span class="absolute left-2 top-0 h-full flex items-center lf text-[10px] font-black dark:text-slate-300">${active}/${cap}</span>`:''}
+      </div>
+      <span class="lf text-[10px] font-black w-10 text-right ${pct>=80?'text-red-500 dark:bg-red-400':pct>=50?'text-amber-500':'text-green-600 dark:text-green-400'}">${pct}%</span>
+      ${overload?'<span class="lf text-[10px] font-black text-red-500">⚠️</span>':'<span class="w-5"></span>'}
+      <div class="tt-text">${t('anal-wl-tooltip-eff')}: ${effScore}% · ${t('anal-wl-tooltip-trust')}: ${m.reliability||0} · ${t('anal-wl-tooltip-speed')}: ${m.speed||0}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ------- SMART INSIGHTS ------- */
+function renderInsights(tasks, members, stats, balance){
+  const lang    = localStorage.getItem('bk-lang') || 'vi';
+  const insights = [];
+
+  // Insight 1: Team Balance
+  if(balance < 50){
+    insights.push({ icon:'⚖️', type:'warning', title:t('anal-insight-balance-bad-title'),
+      text: `${balance}${t('anal-insight-balance-bad-text')}` });
+  } else if(balance < 70){
+    insights.push({ icon:'⚠️', type:'caution', title:t('anal-insight-balance-warn-title'),
+      text: `${balance}${t('anal-insight-balance-warn-text')}` });
+  } else {
+    insights.push({ icon:'✅', type:'good', title:t('anal-insight-balance-ok-title'),
+      text: `${balance}${t('anal-insight-balance-ok-text')}` });
+  }
+
+  // Insight 2: Bottleneck detection
+  const overloaded = members.filter(m => (m.doingCount+m.todoCount) > (m.capacity||5));
+  const underutilized = members.filter(m => {
+    const active = m.doingCount + m.todoCount;
+    return active < (m.capacity||5) * 0.3 && (m.capacity||5) >= 3;
+  });
+
+  if(overloaded.length>0){
+    const names = overloaded.map(m=>`${m.emoji} ${m.name}`).join(', ');
+    insights.push({ icon:'🔴', type:'danger', title:t('anal-insight-bottleneck-title'),
+      text: `${names} ${t('anal-insight-bottleneck-text')}` });
+  }
+
+  if(underutilized.length>0){
+    const names = underutilized.map(m=>`${m.emoji} ${m.name}`).join(', ');
+    insights.push({ icon:'💤', type:'info', title:t('anal-insight-underuse-title'),
+      text: `${names} ${t('anal-insight-underuse-text')}` });
+  }
+
+  // Insight 3: Efficiency analysis
+  const sorted = [...members].sort((a,b)=>BKStore.getMemberEfficiencyScore(b.name)-BKStore.getMemberEfficiencyScore(a.name));
+  const top    = sorted[0];
+  const bottom = sorted[sorted.length-1];
+  if(top && bottom && top.name !== bottom.name){
+    const topEff  = BKStore.getMemberEfficiencyScore(top.name);
+    const botEff  = BKStore.getMemberEfficiencyScore(bottom.name);
+    if(topEff-botEff > 40){
+      insights.push({ icon:'📊', type:'info', title:t('anal-insight-gap-title'),
+        text: `${top.emoji} ${top.name} (${topEff}%) vs ${bottom.emoji} ${bottom.name} (${botEff}%). ${lang==='en'?`Assign high-priority tasks to ${top.name} and training tasks to ${bottom.name}.`:`Giao task ưu tiên cao cho ${top.name} và task thấp/đào tạo cho ${bottom.name} sẽ nâng tỷ lệ hoàn thành lên đáng kể.`}` });
+    }
+  }
+
+  // Insight 4: Completion rate prediction
+  const highTasksDone = tasks.filter(t=>t.priority==='high'&&t.status==='done').length;
+  const highTasksTotal= tasks.filter(t=>t.priority==='high').length;
+  if(highTasksTotal>0){
+    const highRate = Math.round(highTasksDone/highTasksTotal*100);
+    insights.push({ icon:'🎯', type: highRate>=70?'good':'caution', title:t('anal-insight-highrate-title'),
+      text: `${highRate}% ${lang==='en'?'high-priority tasks resolved':'task priority "cao" đã được giải quyết'} (${highTasksDone}/${highTasksTotal}). ${highRate>=70?t('anal-insight-highrate-good'):t('anal-insight-highrate-bad')}` });
+  }
+
+  // Insight 5: Optimal assignment tip
+  if(stats.todo > 0 && members.length > 0){
+    const unassigned = tasks.filter(t=>t.status==='todo'&&!t.assignee);
+    if(unassigned.length>0){
+      insights.push({ icon:'🤖', type:'tip', title:t('anal-insight-assign-title'),
+        text: `${unassigned.length} ${t('anal-insight-assign-text')}` });
+    }
+  }
+
+  const typeStyle = {
+    good:    'bg-green-50 dark:bg-green-900/20 border-green-400 text-green-800 dark:text-green-300',
+    warning: 'bg-amber-50 dark:bg-amber-900/20 border-amber-400 text-amber-800 dark:text-amber-300',
+    danger:  'bg-red-50 dark:bg-red-900/20 border-red-400 text-red-800 dark:text-red-300',
+    caution: 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 text-orange-800 dark:text-orange-300',
+    info:    'bg-blue-50 dark:bg-blue-900/20 border-blue-400 text-blue-800 dark:text-blue-300',
+    tip:     'bg-purple-50 dark:bg-purple-900/20 border-purple-400 text-purple-800 dark:text-purple-300',
+  };
+
+  document.getElementById('insights-list').innerHTML = insights.map(ins=>`
+    <div class="border-2 p-4 ${typeStyle[ins.type]||typeStyle.info}">
+      <div class="flex items-start gap-3">
+        <span class="text-xl flex-shrink-0">${ins.icon}</span>
+        <div>
+          <p class="font-black text-sm mb-1">${ins.title}</p>
+          <p class="text-sm opacity-90">${ins.text}</p>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+/* ------- PRIORITY BREAKDOWN ------- */
+function renderPriorityBreakdown(tasks){
+  const lang   = localStorage.getItem('bk-lang') || 'vi';
+  const high   = tasks.filter(t=>t.priority==='high').length;
+  const medium = tasks.filter(t=>t.priority==='medium').length;
+  const low    = tasks.filter(t=>t.priority==='low').length;
+  const highDone   = tasks.filter(t=>t.priority==='high'   && t.status==='done').length;
+  const mediumDone = tasks.filter(t=>t.priority==='medium' && t.status==='done').length;
+  const lowDone    = tasks.filter(t=>t.priority==='low'    && t.status==='done').length;
+  const max    = Math.max(high, medium, low, 1);
+
+  const quotes = lang === 'en'
+    ? ['Benson\'s blood pressure: MAX', 'Gets done… eventually.', 'When Rigby feels like it.']
+    : ['Huyết áp Benson: MAX 🚨', 'Làm sau cũng được... có thể.', 'Khi nào Rigby chịu làm.'];
+
+  const data = [
+    { label: t('anal-priority-high'), n: high,   done: highDone,   color: 'bg-red-400 dark:bg-red-500',            quote: quotes[0] },
+    { label: t('anal-priority-mid'),  n: medium, done: mediumDone, color: 'bg-amber-400',                           quote: quotes[1] },
+    { label: t('anal-priority-low'),  n: low,    done: lowDone,    color: 'bg-slate-400 dark:bg-slate-500',         quote: quotes[2] },
+  ];
+
+  document.getElementById('priority-chart').innerHTML = data.map(d => {
+    const pct     = Math.round(d.n / max * 100);
+    const ratePct = d.n > 0 ? Math.round(d.done / d.n * 100) : 0;
+    const rateColor = ratePct >= 70 ? 'text-green-600 dark:text-green-400'
+                    : ratePct >= 40 ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-red-500 dark:text-red-400';
+    return `
+    <div class="mb-3">
+      <div class="flex justify-between items-baseline mb-1">
+        <span class="lf text-xs font-bold dark:text-slate-300">${d.label}</span>
+        <div class="flex items-center gap-2">
+          <span class="lf text-[9px] italic text-on-surface-variant dark:text-slate-500">${d.quote}</span>
+          <span class="lf text-xs font-black dark:text-slate-400">${d.n}</span>
+        </div>
+      </div>
+      <div class="relative h-6 bg-surface-container dark:bg-slate-700 border-2 border-[#2d2f2c] dark:border-neon-cyan overflow-hidden">
+        <div class="${d.color} h-full bar-h flex items-center justify-end pr-2" style="width:${pct}%">
+          ${pct > 20 ? `<span class="lf text-[10px] font-black text-white">${pct}%</span>` : ''}
+        </div>
+      </div>
+      <div class="flex justify-between mt-0.5">
+        <span class="lf text-[9px] text-on-surface-variant dark:text-slate-600">
+          ${lang === 'en' ? `${d.done}/${d.n} done` : `${d.done}/${d.n} xong`}
+        </span>
+        <span class="lf text-[9px] font-black ${rateColor}">${ratePct}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ------- STATUS DISTRIBUTION ------- */
+function renderStatusDist(stats){
+  const total = stats.total || 1;
+  const data  = [
+    {label:t('anal-status-done'),   n:stats.done,   pct:Math.round(stats.done/total*100),   color:'bg-green-500',              tcolor:'text-green-600 dark:text-green-400'},
+    {label:t('anal-status-doing'),  n:stats.doing,  pct:Math.round(stats.doing/total*100),  color:'bg-amber-400',              tcolor:'text-amber-600 dark:text-amber-400'},
+    {label:t('anal-status-todo'),   n:stats.todo,   pct:Math.round(stats.todo/total*100),   color:'bg-primary dark:bg-neon-pink', tcolor:'text-primary dark:text-neon-pink'},
+    {label:t('anal-status-overdue'),n:stats.overdue,pct:Math.round(stats.overdue/total*100),color:'bg-red-600',                tcolor:'text-red-600'},
+  ];
+
+  document.getElementById('status-dist').innerHTML = data.map(d=>`
+    <div class="flex items-center gap-3 py-2 border-b border-[#2d2f2c]/10 dark:border-neon-cyan/10 last:border-0">
+      <div class="w-3 h-3 ${d.color} border border-[#2d2f2c] flex-shrink-0"></div>
+      <span class="flex-1 text-sm dark:text-slate-300">${d.label}</span>
+      <span class="lf font-black ${d.tcolor}">${d.n}</span>
+      <span class="lf text-[10px] text-on-surface-variant dark:text-slate-500 w-10 text-right">${d.pct}%</span>
+    </div>`).join('');
+
+  // Completion donut
+  const cp = stats.completion;
+  const cpEl = document.getElementById('completion-ring');
+  const lang2 = localStorage.getItem('bk-lang') || 'vi';
+  const doneLabel = lang2 === 'en' ? 'Done' : 'Xong';
+  const vibeMsg = cp >= 90 ? (lang2==='en'?'YYYEAHHH! 🎉':'🎉 YYYEAHHH!')
+                : cp >= 70 ? (lang2==='en'?'Not bad 👍':'👍 Khá đấy')
+                : cp >= 40 ? (lang2==='en'?'Push it... 😓':'😓 Cố lên nào!')
+                : (lang2==='en'?'Benson is crying 😢':'😢 Benson đang khóc');
+  if(cpEl){
+    cpEl.innerHTML = `
+      <div class="relative w-32 h-32 mx-auto">
+        <svg viewBox="0 0 36 36" class="w-full h-full -rotate-90">
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e8e9e3" stroke-width="3.8"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="${cp>=70?'#22c55e':cp>=40?'#f59e0b':'#b7004d'}" stroke-width="3.8"
+            stroke-dasharray="${cp} ${100-cp}" stroke-dashoffset="0" stroke-linecap="round" style="transition:stroke-dasharray .9s ease"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="font-black text-2xl dark:text-white">${cp}%</span>
+          <span class="lf text-[9px] font-bold text-on-surface-variant dark:text-slate-400 uppercase">${doneLabel}</span>
+        </div>
+      </div>
+      <p class="text-center lf text-[10px] font-bold mt-2 ${cp>=70?'text-green-600 dark:text-green-400':cp>=40?'text-amber-600':'text-red-500'}">${vibeMsg}</p>`;
+  }
+}
+
+/* ------- WEEKLY ACTIVITY ------- */
+let weekOffset = 0;
+function renderWeeklyActivity(tasksOverride){
+  const lang  = localStorage.getItem('bk-lang') || 'vi';
+  const tasks = tasksOverride || BKStore.getTasks();
+  const now   = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1 + weekOffset*7);
+  weekStart.setHours(0,0,0,0);
+
+  const days = (t('anal-days') instanceof Array) ? t('anal-days') : ['T2','T3','T4','T5','T6','T7','CN'];
+  const dayData = days.map((_,i)=>{
+    const dayStart = new Date(weekStart); dayStart.setDate(weekStart.getDate()+i);
+    const dayEnd   = new Date(dayStart); dayEnd.setDate(dayStart.getDate()+1);
+    const created = tasks.filter(t=>t.createdAt>=dayStart.getTime()&&t.createdAt<dayEnd.getTime()).length;
+    const done    = tasks.filter(t=>t.status==='done'&&t.createdAt>=dayStart.getTime()&&t.createdAt<dayEnd.getTime()).length;
+    const isToday = weekOffset===0 && i === (now.getDay()||7)-1;
+    return {day:days[i],created,done,isToday};
+  });
+
+  const maxVal = Math.max(...dayData.map(d=>Math.max(d.created,d.done)),1);
+  const locale = lang === 'en' ? 'en-US' : 'vi-VN';
+  const dateStr  = weekStart.toLocaleDateString(locale, {day:'2-digit',month:'2-digit'});
+  const dateEnd  = new Date(weekStart); dateEnd.setDate(weekStart.getDate()+6);
+  const dateEnd2 = dateEnd.toLocaleDateString(locale, {day:'2-digit',month:'2-digit'});
+
+  // Weekly summary
+  const totalCreated = dayData.reduce((s,d)=>s+d.created, 0);
+  const totalDone    = dayData.reduce((s,d)=>s+d.done, 0);
+  const weekRate     = totalCreated > 0 ? Math.round(totalDone/totalCreated*100) : 0;
+  const weekComment  = weekRate>=80
+    ? (lang==='en'?'Skips approves 🙌':'Skips gật đầu 🙌')
+    : weekRate>=50
+    ? (lang==='en'?'Mordecai-level effort 👍':'Nỗ lực kiểu Mordecai 👍')
+    : weekRate>=20
+    ? (lang==='en'?'Rigby-mode activated 😴':'Chế độ Rigby 😴')
+    : (lang==='en'?'Benson is about to fire everyone 😡':'Benson sắp sa thải tất cả 😡');
+
+  document.getElementById('week-label').textContent = `${dateStr} – ${dateEnd2}`;
+
+  // Summary badge
+  const summaryEl = document.getElementById('week-summary');
+  if(summaryEl){
+    summaryEl.innerHTML = totalCreated > 0
+      ? `<span class="lf text-[10px] font-bold text-on-surface-variant dark:text-slate-400">
+          ${lang==='en'?`Created: ${totalCreated} · Done: ${totalDone} · Rate: ${weekRate}%`:`Tạo: ${totalCreated} · Xong: ${totalDone} · Tỷ lệ: ${weekRate}%`}
+          <em class="italic ml-1 opacity-70">${weekComment}</em>
+         </span>`
+      : `<span class="lf text-[10px] italic text-on-surface-variant dark:text-slate-500">
+          ${lang==='en'?"Rigby's doing nothing this week either.":'Rigby không làm gì tuần này càng không.'}
+         </span>`;
+  }
+
+  document.getElementById('weekly-chart').innerHTML = dayData.map(d=>`
+    <div class="flex flex-col items-center gap-1">
+      <div class="flex items-end gap-0.5 h-24">
+        <div class="tooltip w-4 bg-primary dark:bg-neon-pink bar-v ${d.isToday?'ring-2 ring-amber-400':''}" style="height:${Math.max(4,Math.round(d.created/maxVal*100))}%">
+          <div class="tt-text">${t('anal-tooltip-created')}: ${d.created}</div>
+        </div>
+        <div class="tooltip w-4 bg-green-500 bar-v" style="height:${Math.max(0,Math.round(d.done/maxVal*100))}%">
+          <div class="tt-text">${t('anal-tooltip-done')}: ${d.done}</div>
+        </div>
+      </div>
+      <span class="lf text-[10px] font-black ${d.isToday?'text-amber-500':'dark:text-slate-400'}">${d.day}${d.isToday?'*':''}</span>
+      <span class="lf text-[9px] text-on-surface-variant dark:text-slate-600">${d.created>0||d.done>0?`${d.created}/${d.done}`:''}</span>
+    </div>`).join('');
+}
+
+function prevWeek(){ weekOffset--; renderWeeklyActivity(); }
+function nextWeek(){ if(weekOffset<0){weekOffset++; renderWeeklyActivity();} }
+
+document.addEventListener('DOMContentLoaded', () => {
+  BKRealtime.init();
+  renderAnalytics();
+  window.__analyticsRerenderOnLang = () => renderAnalytics();
+});
+</script>
+</head>
+<body class="bg-background dark:bg-midnight text-on-surface dark:text-slate-100">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col p-4 space-y-6 z-40 bg-[#e8e9e3] dark:bg-slate-900 border-r-4 border-[#2d2f2c] dark:border-neon-cyan">
+  <div class="flex items-center gap-3 px-2">
+    <div class="w-12 h-12 bg-primary-container border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md overflow-hidden">
+      <img alt="Logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-nZAddATXUnixnquI_8ReEW_nNerUNdJyIgj3QzEjATNT3DeT-c5fy1Qhtlu328p0n18YdHP-nHymlYLGN5IDXq6nI4mdYB1gI6Kw9-xKiL2svY7wqHo-HZZF-_CjUqj8pi-H4ccKH1fkYg39rrp2BQ9XiH2sm51nCvqdrf2NS39lO8Mt6gKJIt1EXQYtCLQh-S9Y-B_t-N9A3ldGgGSyg180y7nC4Utvl7b1hJQiUK65TgGqo0N_Jn3ilqRcoM0RBEWFX6G5qlQ"/>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-[#b7004d] dark:text-neon-pink tracking-tighter">The Park</h1>
+      <p class="lf text-xs font-medium opacity-70 uppercase tracking-widest dark:text-neon-cyan" data-i18n="site-tagline">Quản Lý Công Việc</p>
+    </div>
+  </div>
+  <a href="my_board.html" class="w-full bg-tertiary-container dark:bg-amber-400 text-[#2d2f2c] border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold lf flex items-center justify-center gap-2">
+    <span class="material-symbols-outlined">add_circle</span> <span data-i18n="btn-new-task">Thêm Task Mới</span>
+  </a>
+  <nav class="flex-1 space-y-2">
+    <a class="flex items-center gap-3 p-3 rounded-md lf font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all dark:text-slate-300" href="brotherkanban_dashboard_creative_night/code.html"><span class="material-symbols-outlined">dashboard</span><span data-i18n="nav-dashboard">Tổng Quan</span></a>
+    <a class="flex items-center gap-3 p-3 rounded-md lf font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all dark:text-slate-300" href="my_board.html"><span class="material-symbols-outlined">view_kanban</span><span data-i18n="nav-myboard">Bảng Của Tôi</span></a>
+    <a class="flex items-center gap-3 p-3 rounded-md lf font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all dark:text-slate-300" href="team.html"><span class="material-symbols-outlined">group</span><span data-i18n="nav-team">Đội Ngũ</span></a>
+    <a class="flex items-center gap-3 bg-[#ff7294] dark:bg-neon-pink text-[#2d2f2c] dark:text-white border-2 border-[#2d2f2c] p-3 rounded-md lf font-bold shadow-[4px_4px_0px_0px_rgba(45,47,44,1)]" href="#"><span class="material-symbols-outlined">insights</span><span data-i18n="nav-analytics">Thống Kê</span></a>
+    <a class="flex items-center gap-3 p-3 rounded-md lf font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all dark:text-slate-300" href="settings.html"><span class="material-symbols-outlined">settings</span><span data-i18n="nav-settings">Cài Đặt</span></a>
+  </nav>
+  <div class="space-y-2 pt-4 border-t-2 border-[#2d2f2c]/10 dark:border-neon-cyan/20">
+    <a class="flex items-center gap-3 p-2 lf font-medium dark:text-slate-400 hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="help.html"><span class="material-symbols-outlined text-xl">help</span><span data-i18n="nav-help">Trợ Giúp</span></a>
+    <a class="flex items-center gap-3 p-2 lf font-bold text-[#b7004d] dark:text-neon-pink hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="#" onclick="event.preventDefault();doLogout();"><span class="material-symbols-outlined text-xl">logout</span><span data-i18n="nav-logout">Đăng Xuất</span></a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="ml-64 min-h-screen flex flex-col">
+  <header class="flex justify-between items-center px-6 py-4 bg-[#f7f7f2] dark:bg-slate-900/80 backdrop-blur-md border-b-4 border-[#2d2f2c] dark:border-neon-pink sticky top-0 z-30">
+    <span class="text-2xl font-black text-[#2d2f2c] dark:text-neon-cyan italic neon-cyan-t">BrotherKanban</span>
+    <nav class="hidden lg:flex items-center gap-8">
+      <a class="lf font-bold text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-primary" href="my_board.html">Tasks</a>
+      <a class="lf font-bold text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-primary" href="sprint.html">Sprint</a>
+      <a class="lf font-bold text-sm uppercase text-[#b7004d] dark:text-neon-pink border-b-2 border-[#b7004d]" href="reports.html">Reports</a>
+    </nav>
+    <div class="flex items-center gap-4">
+      <button id="lang-toggle-btn" onclick="toggleLanguage()" class="px-3 h-10 border-2 border-[#2d2f2c] dark:border-neon-cyan rounded-md lf font-black text-sm dark:text-neon-cyan hover:bg-secondary-container transition-colors">🇺🇸 EN</button>
+      <button onclick="toggleTheme()" class="w-10 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md dark:text-neon-pink hover:bg-tertiary-container transition-colors">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">dark_mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="p-8 flex-1 relative">
+    <!-- Background Image -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+      <img alt="Park background" class="w-full h-full object-cover opacity-10 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay" src="https://lh3.googleusercontent.com/aida/ADBb0uizYgT99pdp9X-L_qaDnz7PUOQG5ygUQT1Vs5I0m-LSMJUrYobtbOrWDorY9HmAh6k2tdr1iCPpeCf9ViVoI2uz0-vTz-QsHymDXO5G3y8bEuK7DBQ8XOXr1uJlexcNtjuFY5ufjD8DY5Dk41QVUhG9RKhS9Ktisam-xk1StxNeBzjDYz44WAReHkXpI1g7l2zmTNgnmxmk3FXBzvVai2jt9fcsbHQD6hvHZul42Uemp3W-0v9vlT3dh2o"/>
+      <div class="absolute inset-0 bg-transparent dark:bg-midnight/60"></div>
+    </div>
+    <div class="relative z-10">
+    <!-- Header -->
+    <section class="flex flex-col md:flex-row justify-between items-end gap-6 mb-8">
+      <div>
+        <span class="lf bg-secondary-container dark:bg-neon-cyan/20 dark:text-neon-cyan border-2 border-[#2d2f2c] px-3 py-1 rounded-full text-xs font-bold uppercase inline-block mb-4" data-i18n="anal-badge">BÁO CÁO CÔNG VIÊN</span>
+        <h2 class="text-5xl font-black dark:text-white tracking-tighter mb-2" data-i18n="anal-title">Thống Kê</h2>
+        <p class="text-lg text-on-surface-variant dark:text-slate-300" data-i18n="anal-subtitle">"Số liệu không biết nói dối. Chỉ Rigby mới nói dối thôi."</p>
+      </div>
+      <a href="reports.html" class="lf font-black text-sm border-2 border-[#2d2f2c] dark:border-neon-cyan dark:text-neon-cyan px-4 py-2.5 hover:bg-secondary-container transition-colors flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">open_in_new</span> <span data-i18n="anal-view-report">Xem Báo Cáo Đầy Đủ</span>
+      </a>
+    </section>
+
+    <!-- KPI Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div class="card bg-white dark:bg-slate-800 p-4 text-center">
+        <div id="kpi-total" class="text-3xl font-black dark:text-white">0</div>
+        <div class="lf text-[9px] uppercase font-bold text-on-surface-variant dark:text-slate-400 mt-1" data-i18n="kpi-total-label">Tổng Task</div>
+      </div>
+      <div class="card bg-green-50 dark:bg-green-900/20 p-4 text-center">
+        <div id="kpi-done" class="text-3xl font-black text-green-600 dark:text-green-400">0</div>
+        <div class="lf text-[9px] uppercase font-bold text-green-700 dark:text-green-500 mt-1" data-i18n="kpi-done-label">Hoàn Thành ✅</div>
+      </div>
+      <div class="card bg-amber-50 dark:bg-amber-900/20 p-4 text-center">
+        <div id="kpi-doing" class="text-3xl font-black text-amber-600 dark:text-amber-400">0</div>
+        <div class="lf text-[9px] uppercase font-bold text-amber-700 dark:text-amber-500 mt-1" data-i18n="kpi-doing-label">Đang Làm ⚡</div>
+      </div>
+      <div class="card bg-red-50 dark:bg-red-900/20 p-4 text-center">
+        <div id="kpi-overdue" class="text-3xl font-black text-red-600 dark:text-red-400">0</div>
+        <div class="lf text-[9px] uppercase font-bold text-red-700 dark:text-red-500 mt-1" data-i18n="kpi-overdue-label">Quá Hạn ⏰</div>
+      </div>
+      <div class="card bg-primary-container dark:bg-neon-pink/10 p-4 text-center">
+        <div id="kpi-rate" class="text-3xl font-black text-primary dark:text-neon-pink">0%</div>
+        <div class="lf text-[9px] uppercase font-bold text-primary dark:text-neon-pink mt-1" data-i18n="kpi-rate-label">Tỷ Lệ Xong</div>
+      </div>
+      <div class="card bg-secondary-container dark:bg-neon-cyan/10 p-4 text-center">
+        <div id="kpi-balance" class="text-3xl font-black text-secondary dark:text-neon-cyan">0%</div>
+        <div class="lf text-[9px] uppercase font-bold text-secondary dark:text-neon-cyan mt-1" data-i18n="kpi-balance-label">Cân Bằng Nhóm ⚖️</div>
+      </div>
+    </div>
+
+    <!-- Smart Insights -->
+    <div class="card bg-white dark:bg-slate-800 p-6 mb-8">
+      <h3 class="text-2xl font-black dark:text-white mb-4">🧠 Phân Tích Thông Minh</h3>
+      <p class="lf text-xs text-on-surface-variant dark:text-slate-400 mb-4">Skips phân tích data và đưa ra insight thực tế. Không phải dự đoán cảm tính.</p>
+      <div id="insights-list" class="space-y-3"></div>
+    </div>
+
+    <!-- Main Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+      <!-- Efficiency Leaderboard -->
+      <div class="card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-2">🏆 Bảng Xếp Hạng Hiệu Suất</h3>
+        <p class="lf text-xs text-on-surface-variant dark:text-slate-400 mb-4">
+          Dựa trên: tỷ lệ hoàn thành × độ tin cậy × tốc độ × mức độ tải việc.
+          Làm nhiều task hơn năng lực → điểm thưởng!
+        </p>
+        <div id="eff-board" class="space-y-0"></div>
+        <div class="mt-4 p-3 bg-tertiary-container dark:bg-amber-900/20 border-2 border-[#2d2f2c] dark:border-amber-400 flex items-center gap-3">
+          <span class="text-2xl">⭐</span>
+          <div>
+            <span class="lf text-xs font-black uppercase dark:text-white">MVP Tuần Này</span>
+            <p id="mvp-name" class="font-black dark:text-white">—</p>
+            <p id="mvp-score" class="lf text-xs text-on-surface-variant dark:text-slate-400">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workload Balance -->
+      <div class="card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-2">⚖️ Phân Bổ Tải Việc Theo Năng Lực</h3>
+        <p class="lf text-xs text-on-surface-variant dark:text-slate-400 mb-4">
+          Thanh = tải hiện tại / giới hạn cá nhân. Di chuột để xem chi tiết.
+          🔴 &gt;80% = quá tải ⚠️
+        </p>
+        <div id="workload-chart" class="space-y-1"></div>
+        <div class="mt-3 flex gap-4 lf text-[10px]">
+          <span class="flex items-center gap-1"><span class="w-3 h-3 bg-green-500"></span> &lt;50% Còn thoải mái</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 bg-amber-400"></span> 50-79% Bình thường</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 bg-red-500"></span> ≥80% Quá tải</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Charts Row -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <!-- Priority -->
+      <div class="card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-4">🎯 Phân Bổ Ưu Tiên</h3>
+        <div id="priority-chart" class="space-y-3"></div>
+      </div>
+
+      <!-- Status Donut -->
+      <div class="card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-4">📈 Trạng Thái Task</h3>
+        <div id="completion-ring" class="mb-4"></div>
+        <div id="status-dist" class="space-y-0"></div>
+      </div>
+
+      <!-- Weekly Activity -->
+      <div class="card bg-white dark:bg-slate-800 p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-black dark:text-white">📅 Hoạt Động Tuần</h3>
+          <div class="flex items-center gap-2">
+            <button onclick="prevWeek()" class="w-7 h-7 border-2 border-[#2d2f2c] dark:border-neon-cyan dark:text-neon-cyan flex items-center justify-center hover:bg-surface-container transition-colors text-sm font-black">←</button>
+            <span id="week-label" class="lf text-[10px] font-bold dark:text-slate-400"></span>
+            <button onclick="nextWeek()" class="w-7 h-7 border-2 border-[#2d2f2c] dark:border-neon-cyan dark:text-neon-cyan flex items-center justify-center hover:bg-surface-container transition-colors text-sm font-black">→</button>
+          </div>
+        </div>
+        <div id="weekly-chart" class="flex items-end justify-between gap-1 h-28 pb-1"></div>
+        <div id="week-summary" class="mt-1 min-h-[1rem]"></div>
+        <div class="flex gap-4 lf text-[10px] mt-2">
+          <span class="flex items-center gap-1"><span class="w-3 h-3 bg-primary dark:bg-neon-pink"></span><span data-i18n="anal-tooltip-created">Tạo task</span></span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 bg-green-500"></span><span data-i18n="anal-tooltip-done">Hoàn thành</span></span>
+          <span class="flex items-center gap-1 opacity-60 lf text-[9px]">* = <span data-i18n="anal-today">Hôm nay</span></span>
+        </div>
+      </div>
+    </div><!-- end relative z-10 -->
+  </main>
+</div>
+
+</body></html>

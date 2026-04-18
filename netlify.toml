@@ -1,0 +1,22 @@
+# Netlify deployment config cho BrotherKanban (static site)
+[build]
+  publish = "."        # Deploy toàn bộ thư mục hiện tại
+
+# Redirect mọi 404 về index (SPA-like fallback, optional)
+[[redirects]]
+  from   = "/auth-callback"
+  to     = "/auth-callback.html"
+  status = 200
+
+[[redirects]]
+  from   = "/onboarding"
+  to     = "/onboarding.html"
+  status = 200
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options        = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"

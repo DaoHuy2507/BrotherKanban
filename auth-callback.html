@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BrotherKanban — Đang xác thực...</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./bk-supabase.js"></script>
+  <style>
+    body { background: #0d0f0c; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Space Grotesk', sans-serif; }
+    .loader { width: 48px; height: 48px; border: 5px solid #ff7294; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div style="text-align:center;">
+    <div class="loader" style="margin:0 auto 20px;"></div>
+    <p id="status-msg" style="color:#ff7294;font-weight:700;font-size:14px;letter-spacing:.1em;">
+      ĐANG XÁC THỰC... ĐỢI BENSON MỘT CHÚT
+    </p>
+  </div>
+
+  <script>
+  (async () => {
+    const msg = document.getElementById('status-msg');
+
+    try {
+      // Supabase tự đọc token từ URL hash sau OAuth callback
+      const { data: { session }, error } = await BKSupabase.client().auth.getSession();
+
+      if (error || !session) {
+        msg.textContent = '❌ Xác thực thất bại. Đang về trang đăng nhập...';
+        setTimeout(() => {
+          window.location.href = './brotherkanban_ng_nh_p_creative_form/code.html';
+        }, 2000);
+        return;
+      }
+
+      const user = session.user;
+      msg.textContent = 'ĐANG KIỂM TRA HỒ SƠ...';
+
+      // Kiểm tra đã có profile chưa (tìm theo auth_uid)
+      const { data: profile } = await BKSupabase.client()
+        .from('profiles')
+        .select('*')
+        .eq('auth_uid', user.id)
+        .maybeSingle();
+
+      if (profile) {
+        // ✅ Đã có profile → lưu cache và vào dashboard
+        localStorage.setItem('bk-current-user', JSON.stringify(profile));
+        await BKSupabase.pullToLocal().catch(() => {});
+        msg.textContent = `✅ Chào ${profile.name}! Đang vào...`;
+        setTimeout(() => {
+          window.location.href = './brotherkanban_dashboard_creative_night/code.html';
+        }, 800);
+      } else {
+        // 🆕 Google user mới → chuyển sang trang onboarding
+        // Lưu tạm info từ Google để onboarding dùng
+        const googleName = user.user_metadata?.full_name || user.user_metadata?.name || '';
+        const googleEmail = user.email || '';
+        sessionStorage.setItem('bk-onboard-uid',   user.id);
+        sessionStorage.setItem('bk-onboard-email',  googleEmail);
+        sessionStorage.setItem('bk-onboard-name',   googleName);
+        msg.textContent = '🆕 Tài khoản mới! Điền thêm thông tin...';
+        setTimeout(() => {
+          window.location.href = './onboarding.html';
+        }, 800);
+      }
+    } catch(err) {
+      console.error('[AuthCallback]', err);
+      msg.textContent = '❌ Lỗi: ' + err.message;
+      setTimeout(() => {
+        window.location.href = './brotherkanban_ng_nh_p_creative_form/code.html';
+      }, 3000);
+    }
+  })();
+  </script>
+</body>
+</html>

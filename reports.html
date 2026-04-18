@@ -1,0 +1,284 @@
+﻿<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BrotherKanban | Reports</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-surface":"#2d2f2c","on-surface-variant":"#5a5c58","surface-container":"#e8e9e3","primary":"#b7004d","primary-container":"#ff7294","on-primary":"#ffeff0","secondary":"#006760","secondary-container":"#7fe6db","tertiary-container":"#feb300","background":"#f7f7f2","midnight":"#0f172a","neon-pink":"#ff007f","neon-cyan":"#00f3ff"},"fontFamily":{"headline":["Epilogue"],"body":["Be Vietnam Pro"],"label":["Space Grotesk"]}}}}</script>
+<style>
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+  body{font-family:'Be Vietnam Pro',sans-serif}h1,h2,h3{font-family:'Epilogue',sans-serif}
+  .label-font{font-family:'Space Grotesk',sans-serif}
+  .cel-shade-card{border:3px solid #2d2f2c;box-shadow:6px 6px 0px 0px #2d2f2c}
+  .dark .cel-shade-card{border-color:#00f3ff;box-shadow:6px 6px 0px 0px #ff007f}
+  .dark .neon-glow-pink{text-shadow:0 0 8px #ff007f;color:#ff7294}
+  .dark .neon-glow-cyan{text-shadow:0 0 8px #00f3ff;color:#00f3ff}
+  .bar-fill{transition:width 1s cubic-bezier(.4,0,.2,1)}
+</style>
+<script src="./lang.js"></script>
+<script src="./bk-store.js"></script>
+<script src="./bk-realtime.js"></script>
+<script>
+  function t(key) {
+    const lang = localStorage.getItem('bk-lang') || 'vi';
+    return (typeof TRANSLATIONS !== 'undefined' && TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ? TRANSLATIONS[lang][key] : key;
+  }
+
+  function renderReports(){
+    const lang    = localStorage.getItem('bk-lang') || 'vi';
+    const tasks   = BKStore.getTasks();
+    const members = BKStore.getMemberTaskCounts();
+    const logs    = BKStore.getLogs();
+    const sprints = BKStore.getSprints();
+    const stats   = BKStore.getStats();
+
+    // --- Summary stats ---
+    document.getElementById('r-total').textContent    = stats.total;
+    document.getElementById('r-done').textContent     = stats.done;
+    document.getElementById('r-doing').textContent    = stats.doing;
+    document.getElementById('r-overdue').textContent  = stats.overdue;
+    document.getElementById('r-rate').textContent     = stats.completion + '%';
+
+    // --- Sprint summary ---
+    const completedSprints = sprints.filter(sp => {
+      const s = BKStore.getSprintStats(sp);
+      return s.isComplete;
+    }).length;
+    document.getElementById('r-sprints').textContent = completedSprints + '/' + sprints.length;
+
+    // --- Top performer ---
+    const sorted = [...members].sort((a,b)=>b.doneCount-a.doneCount);
+    const top    = sorted[0];
+    document.getElementById('r-mvp').textContent = top
+      ? `${top.emoji} ${top.name} (${top.doneCount} ${t('rp-mvp-done')})`
+      : t('rp-mvp-none');
+
+    // --- Priority breakdown ---
+    const pHigh = tasks.filter(t=>t.priority==='high').length;
+    const pMed  = tasks.filter(t=>t.priority==='medium').length;
+    const pLow  = tasks.filter(t=>t.priority==='low').length;
+    const barMax = Math.max(pHigh,pMed,pLow,1);
+    document.getElementById('rb-high').style.width = (pHigh/barMax*100)+'%'; document.getElementById('rn-high').textContent=pHigh;
+    document.getElementById('rb-med').style.width  = (pMed/barMax*100)+'%';  document.getElementById('rn-med').textContent=pMed;
+    document.getElementById('rb-low').style.width  = (pLow/barMax*100)+'%';  document.getElementById('rn-low').textContent=pLow;
+
+    // --- Recent logs ---
+    document.getElementById('r-logs').innerHTML = logs.slice(0,8).map(l=>{
+      const displayAction = (lang === 'en' && l.actionEn) ? l.actionEn : l.action;
+      return `
+      <div class="flex gap-3 py-2 border-b border-[#2d2f2c]/10 dark:border-neon-cyan/10 last:border-0">
+        <span class="label-font text-xs text-on-surface-variant dark:text-slate-500 whitespace-nowrap pt-0.5">${bkFormatTime(l.ts, lang)}</span>
+        <div class="flex-1">
+          <span class="label-font text-xs font-bold text-primary dark:text-neon-pink">${bkEscHtml(l.user)}</span>
+          <span class="text-sm dark:text-slate-300"> — ${bkEscHtml(displayAction)}</span>
+        </div>
+      </div>`;
+    }).join('') || `<p class="text-sm text-on-surface-variant dark:text-slate-400 py-4">${t('rp-log-empty')}</p>`;
+
+    // --- All tasks table ---
+    const priorityLabel = function(p) {
+      const icons = {high:'🔴',medium:'🟡',low:'⚪'};
+      const namesVi = {high:'Cao',medium:'Trung Bình',low:'Thấp'};
+      const namesEn = {high:'High',medium:'Medium',low:'Low'};
+      const names = lang==='en' ? namesEn : namesVi;
+      return (icons[p]||'⚪') + ' ' + (names[p]||p);
+    };
+    const statusLabel = function(s) {
+      return s==='todo'?t('rp-status-todo'):s==='doing'?t('rp-status-doing'):t('rp-status-done');
+    };
+    document.getElementById('r-task-table').innerHTML = tasks.length>0
+      ? tasks.map(function(task){
+          var title = (lang==='en'&&task.titleEn)?task.titleEn:task.title;
+          var pCls = task.priority==='high'?'text-red-500':task.priority==='medium'?'text-amber-500':'text-slate-400';
+          var sCls = task.status==='done'?'text-green-600':task.status==='doing'?'text-amber-500':'text-slate-400';
+          var strk = task.status==='done'?'line-through opacity-60':'';
+          return '<tr class="border-b border-[#2d2f2c]/10 dark:border-neon-cyan/10 hover:bg-surface-container dark:hover:bg-slate-700 transition-colors">'
+            +'<td class="py-2 px-3 text-sm dark:text-slate-300 '+strk+'">'+bkEscHtml(title)+'</td>'
+            +'<td class="py-2 px-3"><span class="label-font text-[10px] font-black '+pCls+'">'+priorityLabel(task.priority)+'</span></td>'
+            +'<td class="py-2 px-3"><span class="label-font text-[10px] font-black '+sCls+'">'+statusLabel(task.status)+'</span></td>'
+            +'<td class="py-2 px-3 label-font text-xs text-on-surface-variant dark:text-slate-500">'+bkEscHtml(task.assignee||'—')+'</td>'
+            +'<td class="py-2 px-3 label-font text-xs text-on-surface-variant dark:text-slate-500">'+(task.progress||0)+'%</td>'
+            +'<td class="py-2 px-3 label-font text-xs text-on-surface-variant dark:text-slate-500">'+bkFormatDate(task.createdAt)+'</td>'
+            +'</tr>';
+        }).join('')
+      : '<tr><td colspan="6" class="text-center py-8 text-on-surface-variant dark:text-slate-400">'+t('rp-task-none')+'</td></tr>';
+  }
+
+  function copyReport(){
+    const tasks   = BKStore.getTasks();
+    const stats   = BKStore.getStats();
+    const members = BKStore.getMemberTaskCounts();
+    const top     = [...members].sort((a,b)=>b.doneCount-a.doneCount)[0];
+    const lang    = localStorage.getItem('bk-lang') || 'vi';
+    const now  = new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN');
+    let text = `${t('rp-report-header')} — ${now}\n`;
+    text += `${'='.repeat(40)}\n\n`;
+    text += `${t('rp-copy-overview')}\n`;
+    text += `${t('rp-copy-total')}: ${stats.total}\n`;
+    text += `${t('rp-copy-done')}: ${stats.done} (${stats.completion}%)\n`;
+    text += `${t('rp-copy-doing')}: ${stats.doing}\n`;
+    text += `${t('rp-copy-overdue')}: ${stats.overdue}\n\n`;
+    text += `${t('rp-copy-mvp')}: ${top?`${top.name} — ${top.doneCount} ${t('rp-mvp-done')}`:t('rp-copy-unknown')}\n\n`;
+    text += `${t('rp-copy-tasklist')}\n${'\u2014'.repeat(30)}\n`;
+    tasks.forEach(t=>{
+      text += `[${t.status==='done'?'✅':t.status==='doing'?'⚡':'📋'}] ${(lang==='en'&&t.titleEn)?t.titleEn:t.title} — ${t.priority} — ${t.assignee||'?'}\n`;
+    });
+    text += `\n"Maximum Effort" — Skips`;
+    navigator.clipboard.writeText(text).then(()=>{
+      const btn=document.getElementById('copyBtn');
+      btn.textContent = t('rp-copy-success');
+      btn.classList.add('bg-green-600');
+      setTimeout(()=>{btn.textContent=t('rp-copy-btn-label');btn.classList.remove('bg-green-600');},2000);
+    }).catch(()=>alert(t('rp-copy-fail')));
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+  BKRealtime.init();
+    renderReports();
+    window.__reportRerenderOnLang = () => renderReports();
+  });
+</script>
+</head>
+<body class="bg-background dark:bg-midnight text-on-surface dark:text-slate-100">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col p-4 space-y-6 z-40 bg-[#e8e9e3] dark:bg-slate-900 border-r-4 border-[#2d2f2c] dark:border-neon-cyan">
+  <div class="flex items-center gap-3 px-2">
+    <div class="w-12 h-12 bg-primary-container border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md overflow-hidden">
+      <img alt="Logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-nZAddATXUnixnquI_8ReEW_nNerUNdJyIgj3QzEjATNT3DeT-c5fy1Qhtlu328p0n18YdHP-nHymlYLGN5IDXq6nI4mdYB1gI6Kw9-xKiL2svY7wqHo-HZZF-_CjUqj8pi-H4ccKH1fkYg39rrp2BQ9XiH2sm51nCvqdrf2NS39lO8Mt6gKJIt1EXQYtCLQh-S9Y-B_t-N9A3ldGgGSyg180y7nC4Utvl7b1hJQiUK65TgGqo0N_Jn3ilqRcoM0RBEWFX6G5qlQ"/>
+    </div>
+    <div>
+      <h1 class="text-xl font-bold text-[#b7004d] dark:text-neon-pink neon-glow-pink tracking-tighter">The Park</h1>
+      <p class="font-['Space_Grotesk'] text-xs font-medium opacity-70 uppercase tracking-widest dark:text-neon-cyan" data-i18n="site-tagline">Quản Lý Công Việc</p>
+    </div>
+  </div>
+  <a href="my_board.html" class="w-full bg-tertiary-container dark:bg-amber-400 text-[#2d2f2c] border-2 border-[#2d2f2c] dark:border-white p-3 rounded-md font-bold font-['Space_Grotesk'] flex items-center justify-center gap-2 transition-all">
+    <span class="material-symbols-outlined">add_circle</span> <span data-i18n="btn-new-task">Thêm Task Mới</span>
+  </a>
+  <nav class="flex-1 space-y-2">
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="brotherkanban_dashboard_creative_night/code.html"><span class="material-symbols-outlined">dashboard</span> <span data-i18n="nav-dashboard">Tổng Quan</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="my_board.html"><span class="material-symbols-outlined">view_kanban</span> <span data-i18n="nav-myboard">Bảng Của Tôi</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="team.html"><span class="material-symbols-outlined">group</span> <span data-i18n="nav-team">Đội Ngũ</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="analytics.html"><span class="material-symbols-outlined">insights</span> <span data-i18n="nav-analytics">Thống Kê</span></a>
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-300 p-3 rounded-md font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800 transition-all" href="settings.html"><span class="material-symbols-outlined">settings</span> <span data-i18n="nav-settings">Cài Đặt</span></a>
+  </nav>
+  <div class="space-y-2 pt-6 border-t-2 border-[#2d2f2c]/10 dark:border-neon-cyan/20">
+    <a class="flex items-center gap-3 text-[#2d2f2c] dark:text-slate-400 p-2 font-['Space_Grotesk'] font-medium hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="help.html"><span class="material-symbols-outlined text-xl">help</span> <span data-i18n="nav-help">Trợ Giúp</span></a>
+    <a class="flex items-center gap-3 text-[#b7004d] dark:text-neon-pink p-2 font-['Space_Grotesk'] font-bold hover:bg-[#dcddd7] dark:hover:bg-slate-800" href="#" onclick="event.preventDefault();doLogout();"><span class="material-symbols-outlined text-xl">logout</span> <span data-i18n="nav-logout">Đăng Xuất</span></a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="ml-64 min-h-screen flex flex-col">
+  <header class="flex justify-between items-center px-6 py-4 w-full bg-[#f7f7f2] dark:bg-slate-900/80 backdrop-blur-md border-b-4 border-[#2d2f2c] dark:border-neon-pink sticky top-0 z-30">
+    <div class="flex items-center gap-8">
+      <span class="text-2xl font-black text-[#2d2f2c] dark:text-neon-cyan italic neon-glow-cyan">BrotherKanban</span>
+    </div>
+    <nav class="hidden lg:flex items-center gap-8">
+      <a class="font-['Epilogue'] font-bold text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-primary" href="my_board.html">Tasks</a>
+      <a class="font-['Epilogue'] font-bold text-sm uppercase text-[#2d2f2c] dark:text-slate-300 hover:text-primary" href="sprint.html">Sprint</a>
+      <a class="font-['Epilogue'] font-bold text-sm uppercase text-[#b7004d] dark:text-neon-pink border-b-2 border-[#b7004d]" href="#">Reports</a>
+    </nav>
+    <div class="flex items-center gap-4">
+      <button id="lang-toggle-btn" onclick="toggleLanguage()" class="px-3 h-10 border-2 border-[#2d2f2c] dark:border-neon-cyan rounded-md label-font font-black text-sm dark:text-neon-cyan hover:bg-secondary-container transition-colors">🇺🇸 EN</button>
+      <button onclick="toggleTheme()" class="w-10 h-10 flex items-center justify-center border-2 border-[#2d2f2c] dark:border-neon-pink rounded-md dark:text-neon-pink hover:bg-tertiary-container transition-colors">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">dark_mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="p-8 flex-1 relative">
+    <!-- Background Image -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+      <img alt="Park background" class="w-full h-full object-cover opacity-10 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay" src="https://lh3.googleusercontent.com/aida/ADBb0uizYgT99pdp9X-L_qaDnz7PUOQG5ygUQT1Vs5I0m-LSMJUrYobtbOrWDorY9HmAh6k2tdr1iCPpeCf9ViVoI2uz0-vTz-QsHymDXO5G3y8bEuK7DBQ8XOXr1uJlexcNtjuFY5ufjD8DY5Dk41QVUhG9RKhS9Ktisam-xk1StxNeBzjDYz44WAReHkXpI1g7l2zmTNgnmxmk3FXBzvVai2jt9fcsbHQD6hvHZul42Uemp3W-0v9vlT3dh2o"/>
+      <div class="absolute inset-0 bg-transparent dark:bg-midnight/60"></div>
+    </div>
+    <div class="relative z-10">
+    <section class="flex flex-col md:flex-row justify-between items-end gap-6 mb-10">
+      <div>
+        <span class="label-font bg-secondary-container dark:bg-neon-cyan/20 dark:text-neon-cyan px-3 py-1 border-2 border-[#2d2f2c] rounded-full text-xs font-bold uppercase inline-block mb-4" data-i18n="report-badge">POPS BÁO CÁO</span>
+        <h2 class="text-5xl font-black dark:text-white tracking-tighter mb-2" data-i18n="report-title">Reports</h2>
+        <p class="text-lg text-on-surface-variant dark:text-slate-300" data-i18n="report-subtitle">"Jolly good show! Và đây là số liệu chính xác của mọi thứ."</p>
+      </div>
+      <button id="copyBtn" onclick="copyReport()" class="bg-secondary text-white border-2 border-[#2d2f2c] px-6 py-3 font-bold font-['Space_Grotesk'] flex items-center gap-2 rounded-md shadow-[4px_4px_0px_0px_#003d38] hover:-translate-y-1 transition-all">
+        <span class="material-symbols-outlined text-sm">content_copy</span>
+        <span data-i18n="report-copy-btn">📋 COPY BÁO CÁO</span>
+      </button>
+    </section>
+
+    <!-- Summary cards -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-10">
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-4 text-center">
+        <div id="r-total" class="text-3xl font-black dark:text-white">0</div>
+        <div class="label-font text-[10px] uppercase font-bold text-on-surface-variant dark:text-slate-400 mt-1" data-i18n="kpi-total-label">Tổng Task</div>
+      </div>
+      <div class="cel-shade-card bg-green-50 dark:bg-green-900/20 p-4 text-center">
+        <div id="r-done" class="text-3xl font-black text-green-600 dark:text-green-400">0</div>
+        <div class="label-font text-[10px] uppercase font-bold text-green-700 dark:text-green-500 mt-1" data-i18n="kpi-done-label">Đã Xong ✅</div>
+      </div>
+      <div class="cel-shade-card bg-amber-50 dark:bg-amber-900/20 p-4 text-center">
+        <div id="r-doing" class="text-3xl font-black text-amber-600 dark:text-amber-400">0</div>
+        <div class="label-font text-[10px] uppercase font-bold text-amber-700 dark:text-amber-500 mt-1" data-i18n="kpi-doing-label">Đang Làm ⚡</div>
+      </div>
+      <div class="cel-shade-card bg-red-50 dark:bg-red-900/20 p-4 text-center">
+        <div id="r-overdue" class="text-3xl font-black text-red-600 dark:text-red-400">0</div>
+        <div class="label-font text-[10px] uppercase font-bold text-red-700 dark:text-red-500 mt-1" data-i18n="kpi-overdue-label">Quá Hạn 😱</div>
+      </div>
+      <div class="cel-shade-card bg-primary-container dark:bg-neon-pink/10 p-4 text-center">
+        <div id="r-rate" class="text-3xl font-black text-primary dark:text-neon-pink">0%</div>
+        <div class="label-font text-[10px] uppercase font-bold text-primary dark:text-neon-pink mt-1" data-i18n="kpi-rate-label">Hoàn Thành</div>
+      </div>
+      <div class="cel-shade-card bg-surface-container dark:bg-slate-800 p-4 text-center">
+        <div id="r-sprints" class="text-3xl font-black text-secondary dark:text-neon-cyan">0/0</div>
+        <div class="label-font text-[10px] uppercase font-bold text-on-surface-variant dark:text-slate-400 mt-1" data-i18n="report-sprint-done">Sprint Xong</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <!-- Priority Breakdown -->
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-4">📊 Phân Bổ Ưu Tiên</h3>
+        <div class="space-y-3">
+          <div><div class="flex justify-between mb-1"><span class="label-font text-xs font-bold text-red-600">🔴 Cao</span><span id="rn-high" class="label-font text-xs dark:text-slate-400">0</span></div><div class="h-5 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c] overflow-hidden"><div id="rb-high" class="h-full bg-red-400 bar-fill w-0"></div></div></div>
+          <div><div class="flex justify-between mb-1"><span class="label-font text-xs font-bold text-amber-600">🟡 Trung Bình</span><span id="rn-med" class="label-font text-xs dark:text-slate-400">0</span></div><div class="h-5 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c] overflow-hidden"><div id="rb-med" class="h-full bg-amber-400 bar-fill w-0"></div></div></div>
+          <div><div class="flex justify-between mb-1"><span class="label-font text-xs font-bold text-slate-500">⚪ Thấp</span><span id="rn-low" class="label-font text-xs dark:text-slate-400">0</span></div><div class="h-5 bg-surface-container dark:bg-slate-700 border border-[#2d2f2c] overflow-hidden"><div id="rb-low" class="h-full bg-slate-400 bar-fill w-0"></div></div></div>
+        </div>
+        <div class="mt-5 p-3 bg-tertiary-container dark:bg-amber-900/20 border-2 border-[#2d2f2c] dark:border-amber-400">
+          <div class="label-font text-xs font-black uppercase dark:text-white mb-1">🏆 MVP Tuần Này</div>
+          <div id="r-mvp" class="font-bold dark:text-white text-sm">—</div>
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+        <h3 class="text-xl font-black dark:text-white mb-4">📜 Nhật Ký Gần Đây</h3>
+        <div id="r-logs" class="text-sm space-y-0"></div>
+      </div>
+    </div>
+
+    <!-- Full task table -->
+    <div class="cel-shade-card bg-white dark:bg-slate-800 p-6">
+      <h3 class="text-xl font-black dark:text-white mb-4">📋 Toàn Bộ Task</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-surface-container dark:bg-slate-700 border-b-2 border-[#2d2f2c] dark:border-neon-cyan">
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Tên Task</th>
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Ưu Tiên</th>
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Trạng Thái</th>
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Người Làm</th>
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Tiến Độ</th>
+              <th class="label-font text-xs font-black text-left py-2 px-3 dark:text-slate-300 uppercase">Ngày Tạo</th>
+            </tr>
+          </thead>
+          <tbody id="r-task-table" class="divide-y divide-[#2d2f2c]/10 dark:divide-neon-cyan/10"></tbody>
+        </table>
+      </div>
+    </div>
+    </div><!-- end z-10 -->
+  </main>
+</div>
+
+</body></html>
